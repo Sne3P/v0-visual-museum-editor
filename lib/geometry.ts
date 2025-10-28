@@ -1,30 +1,67 @@
-import type { Point, Door, VerticalLink, Artwork } from "./types"
+import type { Point, Door, VerticalLink, Artwork, Room } from "./types"
+import { GRID_SIZE, SNAP_THRESHOLD, GEOMETRY } from "./constants"
 
-export function snapToGrid(point: Point, gridSize: number): Point {
+/**
+ * Enhanced geometry utilities for the Museum Floor Plan Editor
+ * Provides robust mathematical operations for spatial calculations
+ */
+
+export function snapToGrid(point: Point, gridSize: number = GRID_SIZE): Point {
   return {
     x: Math.round(point.x / gridSize),
     y: Math.round(point.y / gridSize),
   }
 }
 
-export function isPointInPolygon(point: Point, polygon: Point[]): boolean {
+/**
+ * Optimized point-in-polygon test using winding number algorithm
+ */
+export function isPointInPolygon(point: Point, polygon: ReadonlyArray<Point>): boolean {
+  if (polygon.length < 3) return false
+  
   let inside = false
   for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x
-    const yi = polygon[i].y
-    const xj = polygon[j].x
-    const yj = polygon[j].y
-
-    const intersect = yi > point.y !== yj > point.y && point.x < ((xj - xi) * (point.y - yi)) / (yj - yi) + xi
-
-    if (intersect) inside = !inside
+    const xi = polygon[i].x, yi = polygon[i].y
+    const xj = polygon[j].x, yj = polygon[j].y
+    
+    if (((yi > point.y) !== (yj > point.y)) &&
+        (point.x < (xj - xi) * (point.y - yi) / (yj - yi) + xi)) {
+      inside = !inside
+    }
   }
   return inside
 }
 
+/**
+ * Calculate bounds for a set of points
+ */
+export function calculateBounds(points: ReadonlyArray<Point>): { 
+  minX: number; minY: number; maxX: number; maxY: number 
+} {
+  if (points.length === 0) {
+    return { minX: 0, minY: 0, maxX: 0, maxY: 0 }
+  }
+  
+  let minX = points[0].x, minY = points[0].y
+  let maxX = points[0].x, maxY = points[0].y
+  
+  for (let i = 1; i < points.length; i++) {
+    const point = points[i]
+    minX = Math.min(minX, point.x)
+    minY = Math.min(minY, point.y)
+    maxX = Math.max(maxX, point.x)
+    maxY = Math.max(maxY, point.y)
+  }
+  
+  return { minX, minY, maxX, maxY }
+}
+
+/**
+ * Get the closest wall segment to a point
+ */
 export function getClosestWallSegment(
   point: Point,
-  polygon: Point[],
+  polygon: ReadonlyArray<Point>,
 ): { start: Point; end: Point; distance: number } | null {
   if (polygon.length < 2) return null
 
@@ -44,7 +81,10 @@ export function getClosestWallSegment(
   return closest
 }
 
-function distanceToSegment(point: Point, start: Point, end: Point): number {
+/**
+ * Calculate distance from point to line segment
+ */
+export function distanceToSegment(point: Point, start: Point, end: Point): number {
   const dx = end.x - start.x
   const dy = end.y - start.y
 
@@ -60,7 +100,19 @@ function distanceToSegment(point: Point, start: Point, end: Point): number {
   return Math.hypot(point.x - projX, point.y - projY)
 }
 
-export function polygonsIntersect(poly1: Point[], poly2: Point[]): boolean {
+/**
+ * Test if two polygons intersect
+ */
+export function polygonsIntersect(poly1: ReadonlyArray<Point>, poly2: ReadonlyArray<Point>): boolean {
+  // Quick bounds check first
+  const bounds1 = calculateBounds(poly1)
+  const bounds2 = calculateBounds(poly2)
+  
+  if (bounds1.maxX < bounds2.minX || bounds2.maxX < bounds1.minX ||
+      bounds1.maxY < bounds2.minY || bounds2.maxY < bounds1.minY) {
+    return false
+  }
+
   // Check if any edges intersect
   for (let i = 0; i < poly1.length; i++) {
     const a1 = poly1[i]
@@ -84,55 +136,59 @@ export function polygonsIntersect(poly1: Point[], poly2: Point[]): boolean {
   return false
 }
 
-function segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
+/**
+ * Test if two line segments intersect
+ */
+export function segmentsIntersect(a1: Point, a2: Point, b1: Point, b2: Point): boolean {
   const det = (a2.x - a1.x) * (b2.y - b1.y) - (b2.x - b1.x) * (a2.y - a1.y)
 
-  if (det === 0) return false
+  if (Math.abs(det) < 1e-10) return false // Parallel lines
 
   const lambda = ((b2.y - b1.y) * (b2.x - a1.x) + (b1.x - b2.x) * (b2.y - a1.y)) / det
   const gamma = ((a1.y - a2.y) * (b2.x - a1.x) + (a2.x - a1.x) * (b2.y - a1.y)) / det
 
-  return 0 < lambda && lambda < 1 && 0 < gamma && gamma < 1
+  return lambda > 0 && lambda < 1 && gamma > 0 && gamma < 1
 }
 
-export function snapToWallSegment(point: Point, rooms: { polygon: Point[] }[], gridSize = 1): Point | null {
-  let closestMidpoint: Point | null = null
+/**
+ * Snap point to wall segment with position information
+ */
+export function snapToWallSegmentWithPosition(
+  point: Point,
+  rooms: ReadonlyArray<{ polygon: ReadonlyArray<Point> }>,
+  snapThreshold = SNAP_THRESHOLD,
+): { point: Point; segmentStart: Point; segmentEnd: Point; distance: number } | null {
+  let closestSnap: { point: Point; segmentStart: Point; segmentEnd: Point; distance: number } | null = null
   let minDistance = Number.POSITIVE_INFINITY
-  const snapThreshold = 0.5 // grid units
 
   for (const room of rooms) {
     for (let i = 0; i < room.polygon.length; i++) {
       const start = room.polygon[i]
       const end = room.polygon[(i + 1) % room.polygon.length]
 
-      // Calculate midpoint of wall segment
-      const midpoint = {
-        x: (start.x + end.x) / 2,
-        y: (start.y + end.y) / 2,
-      }
-
-      const distance = Math.hypot(point.x - midpoint.x, point.y - midpoint.y)
+      // Project point onto segment
+      const projected = projectPointOntoSegment(point, start, end)
+      const distance = Math.hypot(point.x - projected.x, point.y - projected.y)
 
       if (distance < minDistance && distance < snapThreshold) {
         minDistance = distance
-        closestMidpoint = midpoint
+        closestSnap = {
+          point: projected,
+          segmentStart: start,
+          segmentEnd: end,
+          distance
+        }
       }
     }
   }
 
-  return closestMidpoint
+  return closestSnap
 }
 
-export function rectangleOverlapsRooms(rect: Point[], rooms: { polygon: Point[] }[]): boolean {
-  for (const room of rooms) {
-    if (polygonsIntersect(rect, room.polygon)) {
-      return true
-    }
-  }
-  return false
-}
-
-export function createCirclePolygon(center: Point, radius: number, segments = 32): Point[] {
+/**
+ * Create polygon shapes for drawing tools
+ */
+export function createCirclePolygon(center: Point, radius: number, segments = GEOMETRY.circleSegments): Point[] {
   const points: Point[] = []
   for (let i = 0; i < segments; i++) {
     const angle = (i / segments) * Math.PI * 2
@@ -156,7 +212,7 @@ export function createTrianglePolygon(p1: Point, p2: Point): Point[] {
   ]
 }
 
-export function createArcPolygon(center: Point, endPoint: Point, segments = 24): Point[] {
+export function createArcPolygon(center: Point, endPoint: Point, segments = GEOMETRY.arcSegments): Point[] {
   const radius = Math.max(Math.abs(endPoint.x - center.x), Math.abs(endPoint.y - center.y))
   const points: Point[] = []
 
@@ -174,59 +230,27 @@ export function createArcPolygon(center: Point, endPoint: Point, segments = 24):
 
   // Close the arc by connecting back to center
   points.push(center)
-
   return points
 }
 
-export function snapToWallSegmentWithPosition(
-  point: Point,
-  rooms: { polygon: Point[] }[],
-  snapThreshold = 0.8,
-): { point: Point; segmentStart: Point; segmentEnd: Point } | null {
-  let closestSnap: { point: Point; segmentStart: Point; segmentEnd: Point } | null = null
-  let minDistance = Number.POSITIVE_INFINITY
-
+/**
+ * Check if rectangle overlaps with any rooms
+ */
+export function rectangleOverlapsRooms(rect: ReadonlyArray<Point>, rooms: ReadonlyArray<{ polygon: ReadonlyArray<Point> }>): boolean {
   for (const room of rooms) {
-    for (let i = 0; i < room.polygon.length; i++) {
-      const start = room.polygon[i]
-      const end = room.polygon[(i + 1) % room.polygon.length]
-
-      // Project point onto segment
-      const dx = end.x - start.x
-      const dy = end.y - start.y
-      const lengthSquared = dx * dx + dy * dy
-
-      if (lengthSquared === 0) continue
-
-      const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared))
-
-      const projectedPoint = {
-        x: start.x + t * dx,
-        y: start.y + t * dy,
-      }
-
-      const distance = Math.hypot(point.x - projectedPoint.x, point.y - projectedPoint.y)
-
-      if (distance < minDistance && distance < snapThreshold) {
-        minDistance = distance
-        closestSnap = {
-          point: projectedPoint,
-          segmentStart: start,
-          segmentEnd: end,
-        }
-      }
+    if (polygonsIntersect(rect, room.polygon)) {
+      return true
     }
   }
-
-  return closestSnap
+  return false
 }
 
 export function isWallSegmentOccupied(
   segmentStart: Point,
   segmentEnd: Point,
-  doors: Door[],
-  verticalLinks: VerticalLink[],
-  artworks: Artwork[],
+  doors: ReadonlyArray<Door> | Door[],
+  verticalLinks: ReadonlyArray<VerticalLink> | VerticalLink[],
+  artworks: ReadonlyArray<Artwork> | Artwork[],
   excludeId?: string,
 ): boolean {
   // Check doors
@@ -303,8 +327,8 @@ export function calculateWallSegment(
 }
 
 export function findWallSegmentForElement(
-  elementSegment: [Point, Point],
-  rooms: { id: string; polygon: Point[] }[],
+  elementSegment: readonly [Point, Point] | [Point, Point],
+  rooms: ReadonlyArray<{ id: string; polygon: ReadonlyArray<Point> }> | { id: string; polygon: Point[] }[],
 ): { roomId: string; segmentIndex: number } | null {
   const midpoint = {
     x: (elementSegment[0].x + elementSegment[1].x) / 2,
@@ -343,12 +367,12 @@ function distanceToSegmentHelper(point: Point, start: Point, end: Point): number
 }
 
 export function moveElementWithWall(
-  elementSegment: [Point, Point],
+  elementSegment: readonly [Point, Point] | [Point, Point],
   oldWallStart: Point,
   oldWallEnd: Point,
   newWallStart: Point,
   newWallEnd: Point,
-): [Point, Point] {
+): readonly [Point, Point] {
   // Calculate the position of element endpoints relative to the wall
   const oldDx = oldWallEnd.x - oldWallStart.x
   const oldDy = oldWallEnd.y - oldWallStart.y
@@ -377,12 +401,12 @@ export function moveElementWithWall(
       x: newWallStart.x + t2 * newDx,
       y: newWallStart.y + t2 * newDy,
     },
-  ]
+  ] as const
 }
 
 export function isElementInRoom(
-  element: { xy: [number, number]; size?: [number, number] },
-  room: { polygon: Point[] },
+  element: { xy: readonly [number, number] | [number, number]; size?: readonly [number, number] | [number, number] },
+  room: { polygon: ReadonlyArray<Point> | Point[] },
 ): boolean {
   const size = element.size || [1, 1]
   const corners = [
@@ -414,8 +438,8 @@ export function projectPointOntoSegment(point: Point, segmentStart: Point, segme
 }
 
 export function isArtworkInRoom(
-  artwork: { xy: [number, number]; size?: [number, number] },
-  room: { polygon: Point[] },
+  artwork: { xy: readonly [number, number] | [number, number]; size?: readonly [number, number] | [number, number] },
+  room: { polygon: ReadonlyArray<Point> | Point[] },
 ): boolean {
   const size = artwork.size || [1, 1]
   const center = {
@@ -429,7 +453,7 @@ export function isArtworkInRoom(
 
 export function getArtworkResizeHandle(
   mousePos: Point,
-  artwork: { xy: [number, number]; size?: [number, number] },
+  artwork: { xy: readonly [number, number] | [number, number]; size?: readonly [number, number] | [number, number] },
   threshold = 0.3,
 ): "nw" | "ne" | "sw" | "se" | "n" | "s" | "e" | "w" | null {
   const size = artwork.size || [1, 1]

@@ -6,7 +6,6 @@ import { Toolbar } from "./toolbar"
 import { FloorTabs } from "./floor-tabs"
 import { PropertiesPanel } from "./properties-panel"
 import { ExportDialog } from "./export-dialog"
-import { ContextMenu } from "./context-menu"
 import type { EditorState, Tool, Floor } from "@/lib/types"
 
 export function MuseumEditor() {
@@ -17,14 +16,18 @@ export function MuseumEditor() {
         name: "Ground Floor",
         rooms: [],
         doors: [],
+        walls: [],
         artworks: [],
         verticalLinks: [],
+        escalators: [],
+        elevators: [],
       },
     ],
     currentFloorId: "F1",
     selectedTool: "select",
     selectedElementId: null,
     selectedElementType: null,
+    selectedElements: [],
     gridSize: 1.0,
     zoom: 1,
     pan: { x: 0, y: 0 },
@@ -62,8 +65,11 @@ export function MuseumEditor() {
       name: `Floor ${newFloorNum}`,
       rooms: [],
       doors: [],
+      walls: [],
       artworks: [],
       verticalLinks: [],
+      escalators: [],
+      elevators: [],
     }
     updateState({
       floors: [...state.floors, newFloor],
@@ -262,12 +268,7 @@ export function MuseumEditor() {
         )}
       </div>
 
-      <ContextMenu
-        state={state}
-        updateState={updateState}
-        currentFloor={currentFloor}
-        onNavigateToFloor={switchFloor}
-      />
+      {/* Context menu is rendered inside the Canvas (so it has x/y coordinates). */}
 
       {showExport && <ExportDialog state={state} onClose={() => setShowExport(false)} />}
     </div>

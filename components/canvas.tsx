@@ -1,27 +1,41 @@
 "use client"
 
 import type React from "react"
-
 import { useRef, useCallback, useState, useEffect } from "react"
-import type { EditorState, Floor, Point, Room, Artwork, Door, VerticalLink } from "@/lib/types"
+import type { EditorState, Floor, Point, Room, Artwork, Door, VerticalLink, HoverInfo, DragInfo } from "@/lib/types"
 import {
   snapToGrid,
   isPointInPolygon,
   snapToWallSegmentWithPosition,
-  rectangleOverlapsRooms,
+  polygonsIntersect,
   createCirclePolygon,
   createTrianglePolygon,
   createArcPolygon,
-  polygonsIntersect,
+  rectangleOverlapsRooms,
   isWallSegmentOccupied,
   calculateWallSegment,
   findWallSegmentForElement,
   moveElementWithWall,
   isElementInRoom,
-  projectPointOntoSegment, // Import new function
-  isArtworkInRoom, // Import new function
-  getArtworkResizeHandle, // Import new function
+  projectPointOntoSegment,
+  isArtworkInRoom,
+  getArtworkResizeHandle,
+  calculateBounds,
 } from "@/lib/geometry"
+import { 
+  GRID_SIZE, 
+  MAJOR_GRID_INTERVAL, 
+  COLORS, 
+  STROKE_WIDTHS, 
+  VERTEX_RADIUS, 
+  ENDPOINT_RADIUS,
+  VERTEX_HIT_RADIUS,
+  ENDPOINT_HIT_RADIUS,
+  LINE_HIT_THRESHOLD 
+} from "@/lib/constants"
+import { useRenderOptimization, useThrottle } from "@/lib/hooks"
+import { useKeyboardShortcuts, getInteractionCursor, calculateSmoothZoom } from "@/lib/interactions"
+import { validateRoom, validateArtwork, validateDoor, validateVerticalLink } from "@/lib/validation"
 import { ContextMenu } from "./context-menu"
 
 interface CanvasProps {
@@ -29,12 +43,13 @@ interface CanvasProps {
   updateState: (updates: Partial<EditorState>) => void
   currentFloor: Floor
   onNavigateToFloor?: (floorId: string) => void
+  onRecenter?: () => void
 }
 
 export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const animationFrameRef = useRef<number>()
+  const animationFrameRef = useRef<number | null>(null)
 
   const [hoveredPoint, setHoveredPoint] = useState<Point | null>(null)
   const [isValidPlacement, setIsValidPlacement] = useState(true)
@@ -205,14 +220,14 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
           const isVertexHovered =
             hoveredElement?.type === "vertex" && hoveredElement.id === room.id && hoveredElement.vertexIndex === index
 
-          const vertexRadius = isVertexHovered ? 12 : isSelected ? 8 : 6
+          const vertexRadius = (isVertexHovered ? 8 : isSelected ? 5 : 4) * state.zoom
 
           ctx.beginPath()
           ctx.arc(screenPoint.x, screenPoint.y, vertexRadius, 0, Math.PI * 2)
 
           if (isVertexHovered) {
             ctx.shadowColor = "rgb(34, 197, 94)"
-            ctx.shadowBlur = 20
+            ctx.shadowBlur = 10 * state.zoom
           }
 
           ctx.fillStyle = isVertexHovered ? "rgb(34, 197, 94)" : isSelected ? "rgb(59, 130, 246)" : "rgb(115, 115, 115)"
@@ -221,14 +236,14 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
           ctx.shadowBlur = 0
 
           ctx.strokeStyle = "white"
-          ctx.lineWidth = 2.5
+          ctx.lineWidth = 1.5
           ctx.stroke()
 
           if (isVertexHovered) {
             ctx.beginPath()
-            ctx.arc(screenPoint.x, screenPoint.y, vertexRadius + 4, 0, Math.PI * 2)
+            ctx.arc(screenPoint.x, screenPoint.y, vertexRadius + 2 * state.zoom, 0, Math.PI * 2)
             ctx.strokeStyle = "rgb(34, 197, 94)"
-            ctx.lineWidth = 2
+            ctx.lineWidth = 1.5
             ctx.stroke()
           }
         })
@@ -308,18 +323,29 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
       const isDraggingThis = draggedElement?.type === "door" && draggedElement.id === door.id
       const strokeColor =
         isDraggingThis && !isValidPlacement
-          ? "rgb(239, 68, 68)"
+          ? COLORS.doorInvalid
           : isSelected
-            ? "rgb(217, 119, 6)"
+            ? COLORS.doorSelected
             : isHovered
-              ? "rgb(245, 158, 11)"
-              : "rgb(251, 191, 36)"
+              ? COLORS.doorHovered
+              : COLORS.doorDefault
 
+      // Ligne de base plus fine et élégante
       ctx.beginPath()
       ctx.moveTo(start.x, start.y)
       ctx.lineTo(end.x, end.y)
       ctx.strokeStyle = strokeColor
-      ctx.lineWidth = (isSelected ? 9 : isHovered ? 8 : 6) * state.zoom
+      ctx.lineWidth = (isSelected ? 8 : isHovered ? 6 : 4) * state.zoom
+      ctx.lineCap = "round"
+      ctx.stroke()
+
+      // Ligne décorative plus subtile
+      ctx.beginPath()
+      ctx.moveTo(start.x, start.y)
+      ctx.lineTo(end.x, end.y)
+      ctx.strokeStyle = "white"
+      ctx.lineWidth = (isSelected ? 4 : isHovered ? 3 : 2) * state.zoom
+      ctx.lineCap = "round"
       ctx.stroke()
 
       const isStartHovered =
@@ -335,24 +361,25 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
         isStartHovered ||
         isEndHovered
       ) {
-        const endpointRadius = 8 * state.zoom
+        const endpointRadius = 10 * state.zoom
 
+        // Points de contrôle avec meilleur contraste
         ctx.beginPath()
         ctx.arc(start.x, start.y, isStartHovered ? endpointRadius * 1.3 : endpointRadius, 0, Math.PI * 2)
         if (isStartHovered) {
           ctx.shadowColor = strokeColor
-          ctx.shadowBlur = 15
+          ctx.shadowBlur = 20
         }
         ctx.fillStyle = strokeColor
         ctx.fill()
         ctx.shadowBlur = 0
         ctx.strokeStyle = "white"
-        ctx.lineWidth = 2.5
+        ctx.lineWidth = 3
         ctx.stroke()
 
         if (isStartHovered) {
           ctx.beginPath()
-          ctx.arc(start.x, start.y, endpointRadius * 1.5, 0, Math.PI * 2)
+          ctx.arc(start.x, start.y, endpointRadius * 1.6, 0, Math.PI * 2)
           ctx.strokeStyle = strokeColor
           ctx.lineWidth = 2
           ctx.stroke()
@@ -362,31 +389,52 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
         ctx.arc(end.x, end.y, isEndHovered ? endpointRadius * 1.3 : endpointRadius, 0, Math.PI * 2)
         if (isEndHovered) {
           ctx.shadowColor = strokeColor
-          ctx.shadowBlur = 15
+          ctx.shadowBlur = 20
         }
         ctx.fillStyle = strokeColor
         ctx.fill()
         ctx.shadowBlur = 0
         ctx.strokeStyle = "white"
-        ctx.lineWidth = 2.5
+        ctx.lineWidth = 3
         ctx.stroke()
 
         if (isEndHovered) {
           ctx.beginPath()
-          ctx.arc(end.x, end.y, endpointRadius * 1.5, 0, Math.PI * 2)
+          ctx.arc(end.x, end.y, endpointRadius * 1.6, 0, Math.PI * 2)
           ctx.strokeStyle = strokeColor
           ctx.lineWidth = 2
           ctx.stroke()
         }
       }
 
+      // Icône et texte plus discrets
       const midX = (start.x + end.x) / 2
       const midY = (start.y + end.y) / 2
-      ctx.fillStyle = "white"
-      ctx.font = `bold ${Math.max(8, 10 * state.zoom)}px sans-serif`
+      
+      // Fond plus discret
+      const fontSize = Math.max(8, 10 * state.zoom)
+      ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`
       ctx.textAlign = "center"
       ctx.textBaseline = "middle"
-      ctx.fillText("DOOR", midX, midY)
+      
+      const text = "P"
+      const textWidth = ctx.measureText(text).width
+      const padding = 4 * state.zoom
+      
+      // Rectangle de fond minimaliste
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
+      ctx.beginPath()
+      ctx.roundRect(midX - textWidth/2 - padding, midY - fontSize/2 - padding/2, textWidth + padding*2, fontSize + padding, 2 * state.zoom)
+      ctx.fill()
+      
+      // Contour discret
+      ctx.strokeStyle = strokeColor
+      ctx.lineWidth = 1
+      ctx.stroke()
+      
+      // Texte simple
+      ctx.fillStyle = strokeColor
+      ctx.fillText(text, midX, midY)
     },
     [worldToScreen, state.zoom, state.selectedTool, draggedElement, hoveredElement, isValidPlacement],
   )
@@ -397,21 +445,60 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
       const end = worldToScreen(link.segment[1].x * GRID_SIZE, link.segment[1].y * GRID_SIZE)
 
       const isDraggingThis = draggedElement?.type === "verticalLink" && draggedElement.id === link.id
+      
+      const isStairs = link.type === "stairs"
+      
       const strokeColor =
         isDraggingThis && !isValidPlacement
-          ? "rgb(239, 68, 68)"
+          ? (isStairs ? COLORS.stairsInvalid : COLORS.elevatorInvalid)
           : isSelected
-            ? "rgb(124, 58, 237)"
+            ? (isStairs ? COLORS.stairsSelected : COLORS.elevatorSelected)
             : isHovered
-              ? "rgb(139, 92, 246)"
-              : "rgb(167, 139, 250)"
+              ? (isStairs ? COLORS.stairsHovered : COLORS.elevatorHovered)
+              : (isStairs ? COLORS.stairsDefault : COLORS.elevatorDefault)
 
+      // Ligne principale plus fine
       ctx.beginPath()
       ctx.moveTo(start.x, start.y)
       ctx.lineTo(end.x, end.y)
       ctx.strokeStyle = strokeColor
-      ctx.lineWidth = (isSelected ? 11 : isHovered ? 10 : 8) * state.zoom
+      ctx.lineWidth = (isSelected ? 8 : isHovered ? 6 : 4) * state.zoom
+      ctx.lineCap = "round"
       ctx.stroke()
+
+      // Ligne décorative interne plus discrète
+      ctx.beginPath()
+      ctx.moveTo(start.x, start.y)
+      ctx.lineTo(end.x, end.y)
+      ctx.strokeStyle = "white"
+      ctx.lineWidth = (isSelected ? 4 : isHovered ? 3 : 2) * state.zoom
+      ctx.lineCap = "round"
+      ctx.stroke()
+
+      // Pattern simplifié pour différencier escaliers et ascenseurs
+      if (isStairs) {
+        // Motif en escalier plus discret
+        const segmentLength = Math.hypot(end.x - start.x, end.y - start.y)
+        const steps = Math.max(2, Math.floor(segmentLength / (30 * state.zoom)))
+        
+        ctx.strokeStyle = strokeColor
+        ctx.lineWidth = 1 * state.zoom
+        
+        for (let i = 1; i < steps; i++) {
+          const t = i / steps
+          const x = start.x + (end.x - start.x) * t
+          const y = start.y + (end.y - start.y) * t
+          
+          // Ligne perpendiculaire plus petite
+          const angle = Math.atan2(end.y - start.y, end.x - start.x) + Math.PI / 2
+          const stepSize = 3 * state.zoom
+          
+          ctx.beginPath()
+          ctx.moveTo(x - Math.cos(angle) * stepSize, y - Math.sin(angle) * stepSize)
+          ctx.lineTo(x + Math.cos(angle) * stepSize, y + Math.sin(angle) * stepSize)
+          ctx.stroke()
+        }
+      }
 
       const isStartHovered =
         hoveredElement?.type === "linkEndpoint" && hoveredElement.id === link.id && hoveredElement.endpoint === "start"
@@ -426,24 +513,25 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
         isStartHovered ||
         isEndHovered
       ) {
-        const endpointRadius = 8 * state.zoom
+        const endpointRadius = 12 * state.zoom
 
+        // Points de contrôle améliorés
         ctx.beginPath()
         ctx.arc(start.x, start.y, isStartHovered ? endpointRadius * 1.3 : endpointRadius, 0, Math.PI * 2)
         if (isStartHovered) {
           ctx.shadowColor = strokeColor
-          ctx.shadowBlur = 15
+          ctx.shadowBlur = 20
         }
         ctx.fillStyle = strokeColor
         ctx.fill()
         ctx.shadowBlur = 0
         ctx.strokeStyle = "white"
-        ctx.lineWidth = 2.5
+        ctx.lineWidth = 3
         ctx.stroke()
 
         if (isStartHovered) {
           ctx.beginPath()
-          ctx.arc(start.x, start.y, endpointRadius * 1.5, 0, Math.PI * 2)
+          ctx.arc(start.x, start.y, endpointRadius * 1.6, 0, Math.PI * 2)
           ctx.strokeStyle = strokeColor
           ctx.lineWidth = 2
           ctx.stroke()
@@ -453,47 +541,75 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
         ctx.arc(end.x, end.y, isEndHovered ? endpointRadius * 1.3 : endpointRadius, 0, Math.PI * 2)
         if (isEndHovered) {
           ctx.shadowColor = strokeColor
-          ctx.shadowBlur = 15
+          ctx.shadowBlur = 20
         }
         ctx.fillStyle = strokeColor
         ctx.fill()
         ctx.shadowBlur = 0
         ctx.strokeStyle = "white"
-        ctx.lineWidth = 2.5
+        ctx.lineWidth = 3
         ctx.stroke()
 
         if (isEndHovered) {
           ctx.beginPath()
-          ctx.arc(end.x, end.y, endpointRadius * 1.5, 0, Math.PI * 2)
+          ctx.arc(end.x, end.y, endpointRadius * 1.6, 0, Math.PI * 2)
           ctx.strokeStyle = strokeColor
           ctx.lineWidth = 2
           ctx.stroke()
         }
       }
 
+      // Icône et texte plus discrets
       const midX = (start.x + end.x) / 2
       const midY = (start.y + end.y) / 2
 
       const direction = link.direction || "both"
       let icon = ""
-      if (link.type === "stairs") {
+      let text = ""
+      
+      if (isStairs) {
+        text = "E"
         if (direction === "up") icon = "↑"
         else if (direction === "down") icon = "↓"
         else icon = "↕"
       } else {
-        if (direction === "up") icon = "⬆"
-        else if (direction === "down") icon = "⬇"
-        else icon = "⬍"
+        text = "A"
+        if (direction === "up") icon = "↑"
+        else if (direction === "down") icon = "↓"
+        else icon = "↕"
       }
 
-      ctx.fillStyle = "white"
-      ctx.font = `bold ${Math.max(12, 16 * state.zoom)}px sans-serif`
+      // Fond minimaliste
+      const fontSize = Math.max(8, 10 * state.zoom)
+      ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`
       ctx.textAlign = "center"
       ctx.textBaseline = "middle"
-      ctx.fillText(icon, midX, midY - 6 * state.zoom)
-
-      ctx.font = `bold ${Math.max(7, 9 * state.zoom)}px sans-serif`
-      ctx.fillText(link.type === "stairs" ? "STAIR" : "ELEV", midX, midY + 8 * state.zoom)
+      
+      const textWidth = ctx.measureText(text).width
+      const padding = 4 * state.zoom
+      
+      // Rectangle de fond discret
+      ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
+      ctx.beginPath()
+      ctx.roundRect(midX - textWidth/2 - padding, midY - fontSize/2 - padding/2, textWidth + padding*2, fontSize + padding, 2 * state.zoom)
+      ctx.fill()
+      
+      // Contour thématique discret
+      ctx.strokeStyle = strokeColor
+      ctx.lineWidth = 1
+      ctx.stroke()
+      
+      // Texte principal simple
+      ctx.fillStyle = strokeColor
+      ctx.fillText(text, midX, midY)
+      
+      // Petit indicateur de direction
+      if (icon) {
+        const iconSize = Math.max(6, 8 * state.zoom)
+        ctx.font = `${iconSize}px system-ui, -apple-system, sans-serif`
+        ctx.fillStyle = strokeColor
+        ctx.fillText(icon, midX + 8 * state.zoom, midY - 2 * state.zoom)
+      }
     },
     [worldToScreen, state.zoom, state.selectedTool, draggedElement, hoveredElement, isValidPlacement],
   )
@@ -655,6 +771,7 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
         ctx.lineTo(point.x, point.y)
       }
 
+      let isClosing = false
       if (hoveredPoint) {
         const hoverScreen = worldToScreen(hoveredPoint.x * GRID_SIZE, hoveredPoint.y * GRID_SIZE)
         const distanceToFirst = Math.hypot(
@@ -665,29 +782,46 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
         if (distanceToFirst < 0.3 && state.currentPolygon.length >= 3) {
           ctx.lineTo(firstPoint.x, firstPoint.y)
           ctx.closePath()
+          isClosing = true
 
+          // Remplissage du polygone en cours de finalisation
+          ctx.fillStyle = isValidPlacement ? "rgba(34, 197, 94, 0.2)" : "rgba(239, 68, 68, 0.2)"
+          ctx.fill()
+
+          // Indicateur de fermeture plus petit
           ctx.beginPath()
-          ctx.arc(firstPoint.x, firstPoint.y, 10, 0, Math.PI * 2)
-          ctx.fillStyle = "rgba(34, 197, 94, 0.3)"
+          ctx.arc(firstPoint.x, firstPoint.y, 6 * state.zoom, 0, Math.PI * 2)
+          ctx.fillStyle = "rgba(34, 197, 94, 0.4)"
           ctx.fill()
           ctx.strokeStyle = "rgb(34, 197, 94)"
-          ctx.lineWidth = 3
+          ctx.lineWidth = 2
           ctx.stroke()
         } else {
           ctx.lineTo(hoverScreen.x, hoverScreen.y)
         }
       }
 
+      // Contour du polygone
       ctx.strokeStyle = isValidPlacement ? "rgb(34, 197, 94)" : "rgb(239, 68, 68)"
       ctx.lineWidth = 2
       ctx.stroke()
 
+      // Si le polygone est fermé, ajouter un remplissage léger
+      if (isClosing) {
+        ctx.fillStyle = isValidPlacement ? "rgba(34, 197, 94, 0.15)" : "rgba(239, 68, 68, 0.15)"
+        ctx.fill()
+      }
+
+      // Points du polygone plus petits
       state.currentPolygon.forEach((point) => {
         const screenPoint = worldToScreen(point.x * GRID_SIZE, point.y * GRID_SIZE)
         ctx.beginPath()
-        ctx.arc(screenPoint.x, screenPoint.y, 5, 0, Math.PI * 2)
+        ctx.arc(screenPoint.x, screenPoint.y, 3 * state.zoom, 0, Math.PI * 2)
         ctx.fillStyle = "rgb(34, 197, 94)"
         ctx.fill()
+        ctx.strokeStyle = "white"
+        ctx.lineWidth = 1
+        ctx.stroke()
       })
     }
 
@@ -1338,7 +1472,7 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
             setDraggedArtwork({
               artworkId: artwork.id,
               startPos: gridPos,
-              artworkStartPos: artwork.xy,
+              artworkStartPos: [artwork.xy[0], artwork.xy[1]],
             })
             setIsValidPlacement(true)
             updateState({ selectedElementId: artwork.id, selectedElementType: "artwork" })
@@ -1761,7 +1895,7 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
           xy: [minX, minY],
           size: [width, height],
           name: "New Artwork",
-          pdfId: "",
+          pdf_id: "",
         }
 
         const newFloors = state.floors.map((floor) =>
@@ -1772,6 +1906,8 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
       } else if (state.selectedTool === "door" && wallSegmentSnap && creationPreview) {
         const newDoor: Door = {
           id: `door-${Date.now()}`,
+          room_a: "",
+          room_b: "",
           segment: [creationPreview.start, creationPreview.end],
           width: Math.hypot(
             creationPreview.end.x - creationPreview.start.x,
@@ -1798,6 +1934,7 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
             creationPreview.end.y - creationPreview.start.y,
           ),
           direction: "both",
+          to_floor: "",
         }
 
         const newFloors = state.floors.map((floor) =>
@@ -1858,8 +1995,8 @@ export function Canvas({ state, updateState, currentFloor, onNavigateToFloor }: 
     (e: React.MouseEvent<HTMLCanvasElement>) => {
       if (hoveredElement?.type === "verticalLink" && onNavigateToFloor) {
         const link = currentFloor.verticalLinks.find((l) => l.id === hoveredElement.id)
-        if (link?.connectedFloorId) {
-          onNavigateToFloor(link.connectedFloorId)
+        if (link?.to_floor) {
+          onNavigateToFloor(link.to_floor)
         }
       }
     },

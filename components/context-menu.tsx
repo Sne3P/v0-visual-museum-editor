@@ -169,68 +169,85 @@ export function ContextMenu({
   return (
     <div
       ref={menuRef}
-      className="fixed z-50 min-w-[180px] rounded-lg border border-border bg-background shadow-lg"
+      className="fixed z-50 min-w-[200px] rounded-xl border border-border bg-card/95 backdrop-blur-md shadow-2xl shadow-black/20 overflow-hidden"
       style={{ left: x, top: y }}
     >
       {type === "verticalLink" && (
         <>
+          <div className="px-3 py-2 bg-muted/50 border-b border-border">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Navigation</div>
+          </div>
           <button
             onClick={() => handleNavigate("up")}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground rounded-t-lg"
+            className="w-full px-4 py-3 text-left text-sm text-card-foreground hover:bg-accent/80 hover:text-accent-foreground transition-all duration-200 flex items-center gap-2"
           >
-            Go to Floor Above ↑
+            <span className="text-blue-500">↑</span>
+            Aller à l'étage supérieur
           </button>
           <button
             onClick={() => handleNavigate("down")}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+            className="w-full px-4 py-3 text-left text-sm text-card-foreground hover:bg-accent/80 hover:text-accent-foreground transition-all duration-200 flex items-center gap-2"
           >
-            Go to Floor Below ↓
+            <span className="text-blue-500">↓</span>
+            Aller à l'étage inférieur
           </button>
-          <div className="my-1 h-px bg-border" />
+          <div className="my-1 h-px bg-border/50" />
+          <div className="px-3 py-2 bg-muted/30">
+            <div className="text-xs font-medium text-muted-foreground">Direction</div>
+          </div>
           <button
             onClick={() => handleChangeDirection("up")}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+            className="w-full px-4 py-3 text-left text-sm text-card-foreground hover:bg-accent/80 hover:text-accent-foreground transition-all duration-200 flex items-center gap-2"
           >
-            Direction: Up Only ↑
+            <span className="text-emerald-500">↑</span>
+            Vers le haut uniquement
           </button>
           <button
             onClick={() => handleChangeDirection("down")}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+            className="w-full px-4 py-3 text-left text-sm text-card-foreground hover:bg-accent/80 hover:text-accent-foreground transition-all duration-200 flex items-center gap-2"
           >
-            Direction: Down Only ↓
+            <span className="text-emerald-500">↓</span>
+            Vers le bas uniquement
           </button>
           <button
             onClick={() => handleChangeDirection("both")}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+            className="w-full px-4 py-3 text-left text-sm text-card-foreground hover:bg-accent/80 hover:text-accent-foreground transition-all duration-200 flex items-center gap-2"
           >
-            Direction: Both ↕
+            <span className="text-emerald-500">↕</span>
+            Dans les deux sens
           </button>
-          <div className="my-1 h-px bg-border" />
+          <div className="my-1 h-px bg-border/50" />
         </>
       )}
 
       {type !== "background" && (
         <button
           onClick={handleDelete}
-          className="w-full px-4 py-2 text-left text-sm text-destructive hover:bg-destructive hover:text-destructive-foreground rounded-b-lg"
+          className="w-full px-4 py-3 text-left text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-700 dark:hover:text-red-300 transition-all duration-200 flex items-center gap-2 rounded-b-xl"
         >
-          Delete
+          <span className="text-red-500">🗑</span>
+          Supprimer
         </button>
       )}
 
       {type === "background" && (
         <>
+          <div className="px-3 py-2 bg-muted/50 border-b border-border">
+            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Zoom</div>
+          </div>
           <button
             onClick={handleIncreaseGridDetail}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground rounded-t-lg"
+            className="w-full px-4 py-3 text-left text-sm text-card-foreground hover:bg-accent/80 hover:text-accent-foreground transition-all duration-200 flex items-center gap-2"
           >
-            Zoom In (More Detail)
+            <span className="text-green-500">🔍+</span>
+            Zoomer (Plus de détails)
           </button>
           <button
             onClick={handleDecreaseGridDetail}
-            className="w-full px-4 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground rounded-b-lg"
+            className="w-full px-4 py-3 text-left text-sm text-card-foreground hover:bg-accent/80 hover:text-accent-foreground transition-all duration-200 flex items-center gap-2 rounded-b-xl"
           >
-            Zoom Out (Less Detail)
+            <span className="text-green-500">🔍-</span>
+            Dézoomer (Moins de détails)
           </button>
         </>
       )}
