@@ -310,8 +310,8 @@ export function MuseumEditor() {
   }, [state, updateState])
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <header className="flex items-center justify-between border-b border-border bg-background px-6 py-3">
+    <div className="flex h-screen w-screen flex-col bg-background overflow-hidden">
+      <header className="flex items-center justify-between border-b border-border bg-background px-4 md:px-6 py-3 min-h-[60px] shrink-0">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded bg-foreground">
             <svg className="h-5 w-5 text-background" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -377,30 +377,6 @@ export function MuseumEditor() {
           </div>
 
           <button
-            onClick={() => updateState({
-              measurements: {
-                ...state.measurements,
-                showMeasurements: !state.measurements.showMeasurements,
-              }
-            })}
-            className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
-              state.measurements.showMeasurements
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
-            title="Afficher/Masquer les mesures"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2zM16 8v2m-8 6h8m-8-4h5"
-              />
-            </svg>
-          </button>
-
-          <button
             onClick={recenterView}
             className="rounded bg-muted px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/80"
             title="Recenter view on floor plan"
@@ -424,10 +400,20 @@ export function MuseumEditor() {
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        <Toolbar selectedTool={state.selectedTool} onSelectTool={selectTool} />
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        <Toolbar 
+          selectedTool={state.selectedTool} 
+          onSelectTool={selectTool}
+          measurements={state.measurements}
+          onToggleMeasurements={() => updateState({
+            measurements: {
+              ...state.measurements,
+              showMeasurements: !state.measurements.showMeasurements,
+            }
+          })}
+        />
 
-        <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
           <FloorTabs
             floors={state.floors}
             currentFloorId={state.currentFloorId}
@@ -446,9 +432,11 @@ export function MuseumEditor() {
           />
         </div>
 
+        {/* Panneau de propriétés désactivé temporairement
         {state.selectedElementId && (
           <PropertiesPanel state={state} updateState={updateState} saveToHistory={saveToHistory} currentFloor={currentFloor} />
         )}
+        */}
       </div>
 
       {/* Context menu is rendered inside the Canvas (so it has x/y coordinates). */}

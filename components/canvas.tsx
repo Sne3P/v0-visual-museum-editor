@@ -288,8 +288,8 @@ export function Canvas({
     // Texte de mesure
     const measureText = `${distance.toFixed(2)}m`
     
-    // Taille de police adaptative au zoom (entre 8px et 16px)
-    const fontSize = Math.max(8, Math.min(16, FONTS.measurementSize * Math.pow(state.zoom, 0.3)))
+    // Taille de police adaptative au zoom (entre 10px et 18px - plus gros)
+    const fontSize = Math.max(10, Math.min(18, (FONTS.measurementSize + 2) * Math.pow(state.zoom, 0.3)))
     
     // Style du texte
     ctx.font = `${fontSize}px ${FONTS.measurementFamily}`
@@ -348,8 +348,8 @@ export function Canvas({
     // Texte de surface
     const areaText = `${area.toFixed(2)} m²`
     
-    // Taille de police adaptative au zoom (entre 9px et 18px pour les surfaces)
-    const fontSize = Math.max(9, Math.min(18, (FONTS.measurementSize + 2) * Math.pow(state.zoom, 0.3)))
+    // Taille de police adaptative au zoom (entre 11px et 20px pour les surfaces - plus gros)
+    const fontSize = Math.max(11, Math.min(20, (FONTS.measurementSize + 4) * Math.pow(state.zoom, 0.3)))
     
     // Style du texte
     ctx.font = `bold ${fontSize}px ${FONTS.measurementFamily}`
@@ -390,6 +390,73 @@ export function Canvas({
     
     ctx.fillText(areaText, centerScreen.x, centerScreen.y)
   }, [worldToScreen, state.zoom])
+
+  // Fonction pour dessiner l'échelle dynamique
+  const drawScale = useCallback((ctx: CanvasRenderingContext2D, canvasWidth: number, canvasHeight: number) => {
+    // Position adaptative : ajuster selon la taille de l'écran
+    const isMobile = canvasWidth < 768
+    const scaleX = canvasWidth - (isMobile ? 90 : 120)
+    const scaleY = canvasHeight - (isMobile ? 40 : 50)
+    
+    // Calculer une distance appropriée pour l'échelle en fonction du zoom
+    // Plus on dézoome, plus l'échelle représente une grande distance
+    const baseLength = isMobile ? 60 : 80 // pixels pour l'échelle, plus court sur mobile
+    const gridUnitsLength = baseLength / (GRID_SIZE * state.zoom)
+    const metersLength = gridUnitsLength * 0.5 // 1 grid unit = 0.5m
+    
+    // Arrondir à une valeur lisible (1, 2, 5, 10, 20, 50, etc.)
+    let roundedMeters: number
+    if (metersLength < 1) {
+      roundedMeters = Math.ceil(metersLength * 10) / 10
+    } else if (metersLength < 5) {
+      roundedMeters = Math.ceil(metersLength)
+    } else if (metersLength < 10) {
+      roundedMeters = Math.ceil(metersLength / 5) * 5
+    } else if (metersLength < 50) {
+      roundedMeters = Math.ceil(metersLength / 10) * 10
+    } else {
+      roundedMeters = Math.ceil(metersLength / 50) * 50
+    }
+    
+    // Calculer la longueur réelle en pixels pour cette distance arrondie
+    const actualPixelLength = (roundedMeters / 0.5) * GRID_SIZE * state.zoom
+    
+    // Fond semi-transparent pour l'échelle
+    const padding = isMobile ? 6 : 8
+    const scaleWidth = actualPixelLength + padding * 2
+    const scaleHeight = isMobile ? 25 : 30
+    
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
+    ctx.strokeStyle = "#e5e7eb"
+    ctx.lineWidth = 1
+    ctx.fillRect(scaleX - padding, scaleY - scaleHeight + padding, scaleWidth, scaleHeight)
+    ctx.strokeRect(scaleX - padding, scaleY - scaleHeight + padding, scaleWidth, scaleHeight)
+    
+    // Dessiner la ligne d'échelle
+    ctx.strokeStyle = "#374151"
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(scaleX, scaleY - 15)
+    ctx.lineTo(scaleX + actualPixelLength, scaleY - 15)
+    ctx.stroke()
+    
+    // Marques aux extrémités
+    ctx.beginPath()
+    ctx.moveTo(scaleX, scaleY - 20)
+    ctx.lineTo(scaleX, scaleY - 10)
+    ctx.moveTo(scaleX + actualPixelLength, scaleY - 20)
+    ctx.lineTo(scaleX + actualPixelLength, scaleY - 10)
+    ctx.stroke()
+    
+    // Texte de l'échelle
+    ctx.font = `${isMobile ? 10 : 12}px system-ui, -apple-system, sans-serif`
+    ctx.fillStyle = "#374151"
+    ctx.textAlign = "center"
+    ctx.textBaseline = "top"
+    
+    const scaleText = roundedMeters < 1 ? `${roundedMeters.toFixed(1)}m` : `${roundedMeters}m`
+    ctx.fillText(scaleText, scaleX + actualPixelLength / 2, scaleY - 8)
+  }, [state.zoom])
 
   const drawRoom = useCallback(
     (ctx: CanvasRenderingContext2D, room: Room, isSelected: boolean, isHovered: boolean) => {
@@ -1427,6 +1494,9 @@ export function Canvas({
         }
       })
     }
+
+    // Dessiner l'échelle dynamique en bas à droite
+    drawScale(ctx, width, height)
   }, [
     state,
     currentFloor,
@@ -1450,6 +1520,7 @@ export function Canvas({
     resizingArtwork,
     drawMeasurement,
     drawAreaMeasurement,
+    drawScale,
   ])
 
   const handleMouseMove = useCallback(
@@ -3250,7 +3321,7 @@ export function Canvas({
   }, [render])
 
   return (
-    <div ref={containerRef} className="relative h-full w-full">
+    <div ref={containerRef} className="relative h-full w-full overflow-hidden">
       <canvas
         ref={canvasRef}
         onMouseMove={handleMouseMove}
