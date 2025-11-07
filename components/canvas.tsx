@@ -270,7 +270,8 @@ export function Canvas({
     start: Point,
     end: Point,
     distance: number,
-    isDynamic: boolean = false
+    isDynamic: boolean = false,
+    isHighlighted: boolean = false
   ) => {
     const startScreen = worldToScreen(start.x * GRID_SIZE, start.y * GRID_SIZE)
     const endScreen = worldToScreen(end.x * GRID_SIZE, end.y * GRID_SIZE)
@@ -278,7 +279,7 @@ export function Canvas({
     const perpDirection = getPerpendicularDirection(startScreen, endScreen)
     
     // Position du label
-    const labelOffset = MEASUREMENT_OFFSET * state.zoom
+    const labelOffset = MEASUREMENT_OFFSET * Math.max(0.8, Math.min(1.5, state.zoom))
     const labelPos = {
       x: midpoint.x + perpDirection.x * labelOffset,
       y: midpoint.y + perpDirection.y * labelOffset
@@ -287,37 +288,50 @@ export function Canvas({
     // Texte de mesure
     const measureText = `${distance.toFixed(2)}m`
     
+    // Taille de police adaptative au zoom (entre 8px et 16px)
+    const fontSize = Math.max(8, Math.min(16, FONTS.measurementSize * Math.pow(state.zoom, 0.3)))
+    
     // Style du texte
-    ctx.font = `${FONTS.measurementSize * state.zoom}px ${FONTS.measurementFamily}`
+    ctx.font = `${fontSize}px ${FONTS.measurementFamily}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     
-    // Mesure du texte pour le background
-    const textMetrics = ctx.measureText(measureText)
-    const padding = 4 * state.zoom
-    const bgWidth = textMetrics.width + padding * 2
-    const bgHeight = FONTS.measurementSize * state.zoom + padding * 2
+    // Si c'est en surbrillance (forme sélectionnée), ajouter un fond
+    if (isHighlighted) {
+      const textMetrics = ctx.measureText(measureText)
+      const padding = 4 * Math.max(0.8, Math.min(1.2, state.zoom))
+      const bgWidth = textMetrics.width + padding * 2
+      const bgHeight = fontSize + padding * 2
+      
+      // Fond pour la surbrillance
+      ctx.fillStyle = COLORS.measurementBackground
+      ctx.strokeStyle = COLORS.measurementBorder
+      ctx.lineWidth = 1.5
+      
+      ctx.fillRect(
+        labelPos.x - bgWidth / 2,
+        labelPos.y - bgHeight / 2,
+        bgWidth,
+        bgHeight
+      )
+      ctx.strokeRect(
+        labelPos.x - bgWidth / 2,
+        labelPos.y - bgHeight / 2,
+        bgWidth,
+        bgHeight
+      )
+    }
     
-    // Fond semi-transparent
-    ctx.fillStyle = isDynamic ? COLORS.measurementBackground : COLORS.measurementBackground
-    ctx.strokeStyle = COLORS.measurementBorder
-    ctx.lineWidth = 1
+    // Texte de mesure avec couleur adaptée
+    if (isDynamic) {
+      ctx.fillStyle = COLORS.validStroke
+    } else if (isHighlighted) {
+      ctx.fillStyle = COLORS.measurementText
+    } else {
+      // Texte simple, couleur adaptée au contraste
+      ctx.fillStyle = state.zoom > 1.5 ? COLORS.measurementText : "#666666"
+    }
     
-    ctx.fillRect(
-      labelPos.x - bgWidth / 2,
-      labelPos.y - bgHeight / 2,
-      bgWidth,
-      bgHeight
-    )
-    ctx.strokeRect(
-      labelPos.x - bgWidth / 2,
-      labelPos.y - bgHeight / 2,
-      bgWidth,
-      bgHeight
-    )
-    
-    // Texte de mesure
-    ctx.fillStyle = isDynamic ? COLORS.validStroke : COLORS.measurementText
     ctx.fillText(measureText, labelPos.x, labelPos.y)
   }, [worldToScreen, state.zoom])
 
@@ -325,7 +339,8 @@ export function Canvas({
   const drawAreaMeasurement = useCallback((
     ctx: CanvasRenderingContext2D,
     room: Room,
-    area: number
+    area: number,
+    isHighlighted: boolean = false
   ) => {
     const center = getPolygonCenter(room.polygon)
     const centerScreen = worldToScreen(center.x * GRID_SIZE, center.y * GRID_SIZE)
@@ -333,37 +348,46 @@ export function Canvas({
     // Texte de surface
     const areaText = `${area.toFixed(2)} m²`
     
+    // Taille de police adaptative au zoom (entre 9px et 18px pour les surfaces)
+    const fontSize = Math.max(9, Math.min(18, (FONTS.measurementSize + 2) * Math.pow(state.zoom, 0.3)))
+    
     // Style du texte
-    ctx.font = `${FONTS.measurementSize * state.zoom}px ${FONTS.measurementFamily}`
+    ctx.font = `bold ${fontSize}px ${FONTS.measurementFamily}`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     
-    // Mesure du texte pour le background
-    const textMetrics = ctx.measureText(areaText)
-    const padding = 6 * state.zoom
-    const bgWidth = textMetrics.width + padding * 2
-    const bgHeight = FONTS.measurementSize * state.zoom + padding * 2
+    // Si c'est en surbrillance (forme sélectionnée), ajouter un fond
+    if (isHighlighted) {
+      const textMetrics = ctx.measureText(areaText)
+      const padding = 6 * Math.max(0.8, Math.min(1.3, state.zoom))
+      const bgWidth = textMetrics.width + padding * 2
+      const bgHeight = fontSize + padding * 2
+      
+      // Fond coloré pour les surfaces sélectionnées
+      ctx.fillStyle = COLORS.areaBackground
+      ctx.strokeStyle = COLORS.areaText
+      ctx.lineWidth = 2
+      
+      ctx.fillRect(
+        centerScreen.x - bgWidth / 2,
+        centerScreen.y - bgHeight / 2,
+        bgWidth,
+        bgHeight
+      )
+      ctx.strokeRect(
+        centerScreen.x - bgWidth / 2,
+        centerScreen.y - bgHeight / 2,
+        bgWidth,
+        bgHeight
+      )
+      
+      // Texte avec couleur forte pour la sélection
+      ctx.fillStyle = COLORS.areaText
+    } else {
+      // Texte simple sans fond, couleur adaptée au zoom
+      ctx.fillStyle = state.zoom > 1.2 ? COLORS.areaText : "#0d9488"
+    }
     
-    // Fond coloré pour les surfaces
-    ctx.fillStyle = COLORS.areaBackground
-    ctx.strokeStyle = COLORS.areaText
-    ctx.lineWidth = 1.5
-    
-    ctx.fillRect(
-      centerScreen.x - bgWidth / 2,
-      centerScreen.y - bgHeight / 2,
-      bgWidth,
-      bgHeight
-    )
-    ctx.strokeRect(
-      centerScreen.x - bgWidth / 2,
-      centerScreen.y - bgHeight / 2,
-      bgWidth,
-      bgHeight
-    )
-    
-    // Texte de surface
-    ctx.fillStyle = COLORS.areaText
     ctx.fillText(areaText, centerScreen.x, centerScreen.y)
   }, [worldToScreen, state.zoom])
 
@@ -1340,7 +1364,7 @@ export function Canvas({
           
           if (next && (i < state.currentPolygon.length - 1 || hoveredPoint)) {
             const distance = calculateDistanceInMeters(current, next)
-            drawMeasurement(ctx, current, next, distance, true)
+            drawMeasurement(ctx, current, next, distance, true, false)
           }
         }
       }
@@ -1359,7 +1383,8 @@ export function Canvas({
             { x: Math.min(drawStartPoint.x, hoveredPoint.x), y: drawStartPoint.y }, 
             { x: Math.max(drawStartPoint.x, hoveredPoint.x), y: drawStartPoint.y }
           ), 
-          true
+          true,
+          false
         )
         
         // Mesure hauteur
@@ -1370,7 +1395,8 @@ export function Canvas({
             { x: hoveredPoint.x, y: Math.min(drawStartPoint.y, hoveredPoint.y) }, 
             { x: hoveredPoint.x, y: Math.max(drawStartPoint.y, hoveredPoint.y) }
           ), 
-          true
+          true,
+          false
         )
       }
     }
@@ -1380,12 +1406,15 @@ export function Canvas({
       // Mesures des segments des pièces
       currentFloor.rooms.forEach(room => {
         if (room.polygon.length >= 3) {
+          const isRoomSelected = (state.selectedElementId === room.id && state.selectedElementType === "room") ||
+                               isElementSelected(room.id, "room", state.selectedElements)
+          
           // Mesures des côtés
           for (let i = 0; i < room.polygon.length; i++) {
             const current = room.polygon[i]
             const next = room.polygon[(i + 1) % room.polygon.length]
             const distance = calculateDistanceInMeters(current, next)
-            drawMeasurement(ctx, current, next, distance, false)
+            drawMeasurement(ctx, current, next, distance, false, isRoomSelected)
           }
           
           // Surface de la pièce au centre
@@ -1393,7 +1422,7 @@ export function Canvas({
             m => m.elementId === room.id && m.type === "area"
           )
           if (areaFromMeasurements) {
-            drawAreaMeasurement(ctx, room, areaFromMeasurements.value)
+            drawAreaMeasurement(ctx, room, areaFromMeasurements.value, isRoomSelected)
           }
         }
       })
