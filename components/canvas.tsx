@@ -8,6 +8,7 @@ import {
   isPointInPolygon,
   snapToWallSegmentWithPosition,
   polygonsIntersect,
+  segmentsIntersect,
   createCirclePolygon,
   createTrianglePolygon,
   createArcPolygon,
@@ -460,7 +461,9 @@ export function Canvas({
     ctx.fillText(scaleText, scaleX + actualPixelLength / 2, scaleY - 8)
   }, [state.zoom])
 
-  const drawRoom = useCallback(
+  // === FONCTIONS DE RENDU 2D UNIFIÉES ===
+  
+  const drawRoomBackground = useCallback(
     (ctx: CanvasRenderingContext2D, room: Room, isSelected: boolean, isHovered: boolean) => {
       if (room.polygon.length < 3) return
 
@@ -477,16 +480,34 @@ export function Canvas({
       const isDraggingThis = draggedRoom?.roomId === room.id || (draggedVertex && draggedVertex.roomId === room.id)
       const fillColor =
         isDraggingThis && !isValidPlacement
-          ? "rgba(239, 68, 68, 0.15)"
+          ? "rgba(239, 68, 68, 0.08)"
           : isSelected
-            ? "rgba(59, 130, 246, 0.15)"
+            ? "rgba(59, 130, 246, 0.08)"
             : isHovered
-              ? "rgba(59, 130, 246, 0.08)"
-              : "rgba(245, 245, 245, 0.9)"
+              ? "rgba(59, 130, 246, 0.05)"
+              : "rgba(248, 250, 252, 0.7)" // Fond très subtil
 
       ctx.fillStyle = fillColor
       ctx.fill()
+    },
+    [draggedRoom, draggedVertex, isValidPlacement, state.zoom, worldToScreen]
+  )
 
+  const drawRoomOutline = useCallback(
+    (ctx: CanvasRenderingContext2D, room: Room, isSelected: boolean, isHovered: boolean) => {
+      if (room.polygon.length < 3) return
+
+      ctx.beginPath()
+      const firstPoint = worldToScreen(room.polygon[0].x * GRID_SIZE, room.polygon[0].y * GRID_SIZE)
+      ctx.moveTo(firstPoint.x, firstPoint.y)
+
+      for (let i = 1; i < room.polygon.length; i++) {
+        const point = worldToScreen(room.polygon[i].x * GRID_SIZE, room.polygon[i].y * GRID_SIZE)
+        ctx.lineTo(point.x, point.y)
+      }
+      ctx.closePath()
+
+      const isDraggingThis = draggedRoom?.roomId === room.id || (draggedVertex && draggedVertex.roomId === room.id)
       const strokeColor =
         isDraggingThis && !isValidPlacement
           ? "rgb(239, 68, 68)"
@@ -494,48 +515,43 @@ export function Canvas({
             ? "rgb(59, 130, 246)"
             : isHovered
               ? "rgb(96, 165, 250)"
-              : "rgb(115, 115, 115)"
+              : "rgb(148, 163, 184)" // Couleur uniforme pour toutes les outlines
 
       ctx.strokeStyle = strokeColor
-      ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : 1.5
+      ctx.lineWidth = isSelected ? 2 : isHovered ? 1.5 : 1 // Épaisseurs unifiées
       ctx.stroke()
 
+      // Points de contrôle uniquement en mode sélection
       if (state.selectedTool === "select" || isSelected) {
         room.polygon.forEach((point, index) => {
           const screenPoint = worldToScreen(point.x * GRID_SIZE, point.y * GRID_SIZE)
           const isVertexHovered =
             hoveredElement?.type === "vertex" && hoveredElement.id === room.id && hoveredElement.vertexIndex === index
 
-          const vertexRadius = (isVertexHovered ? 8 : isSelected ? 5 : 4) * state.zoom
+          const vertexRadius = (isVertexHovered ? 6 : isSelected ? 4 : 3) * state.zoom
 
           ctx.beginPath()
           ctx.arc(screenPoint.x, screenPoint.y, vertexRadius, 0, Math.PI * 2)
 
-          if (isVertexHovered) {
-            ctx.shadowColor = "rgb(34, 197, 94)"
-            ctx.shadowBlur = 10 * state.zoom
-          }
-
           ctx.fillStyle = isVertexHovered ? "rgb(34, 197, 94)" : isSelected ? "rgb(59, 130, 246)" : "rgb(115, 115, 115)"
           ctx.fill()
 
-          ctx.shadowBlur = 0
-
           ctx.strokeStyle = "white"
-          ctx.lineWidth = 1.5
+          ctx.lineWidth = 1
           ctx.stroke()
-
-          if (isVertexHovered) {
-            ctx.beginPath()
-            ctx.arc(screenPoint.x, screenPoint.y, vertexRadius + 2 * state.zoom, 0, Math.PI * 2)
-            ctx.strokeStyle = "rgb(34, 197, 94)"
-            ctx.lineWidth = 1.5
-            ctx.stroke()
-          }
         })
       }
     },
-    [worldToScreen, hoveredElement, draggedRoom, draggedWall, draggedVertex, isValidPlacement, state.selectedTool],
+    [draggedRoom, draggedVertex, isValidPlacement, state.zoom, state.selectedTool, worldToScreen, hoveredElement]
+  )
+
+  // Maintenir la fonction drawRoom pour compatibilité
+  const drawRoom = useCallback(
+    (ctx: CanvasRenderingContext2D, room: Room, isSelected: boolean, isHovered: boolean) => {
+      drawRoomBackground(ctx, room, isSelected, isHovered)
+      drawRoomOutline(ctx, room, isSelected, isHovered)
+    },
+    [drawRoomBackground, drawRoomOutline]
   )
 
   const drawArtwork = useCallback(
@@ -1024,16 +1040,55 @@ export function Canvas({
     [worldToScreen, state.zoom, state.selectedTool, draggedElement, hoveredElement, isValidPlacement],
   )
 
+  // === SYSTÈME DE VALIDATION ULTRA-STRICT TEMPS RÉEL ===
   const validatePlacement = useCallback(
     (tool: string, point: Point, startPoint?: Point) => {
+      // RÈGLE 1: Aucune superposition de surface possible
+      // RÈGLE 2: Snap intelligent pour collage parfait sans chevauchement
+      // RÈGLE 3: Retour automatique si action impossible
+      
       if (tool === "room" && state.currentPolygon.length > 0) {
         const firstPoint = state.currentPolygon[0]
         const distance = Math.hypot(point.x - firstPoint.x, point.y - firstPoint.y)
+        
         if (distance < 0.3 && state.currentPolygon.length >= 3) {
-          setIsValidPlacement(true)
+          // Validation stricte du polygone fermé
+          const tempRoom = {
+            id: 'temp-room',
+            name: 'Temporary Room',
+            polygon: [...state.currentPolygon]
+          }
+          
+          const validationResult = validateRoomGeometry(tempRoom, {
+            floor: currentFloor,
+            strictMode: true,
+            allowWarnings: false
+          })
+          
+          setIsValidPlacement(validationResult.valid && validationResult.severity !== 'error')
           return
         }
-        setIsValidPlacement(true)
+        
+        // Validation de chaque nouveau point du polygone
+        if (state.currentPolygon.length >= 2) {
+          const testPolygon = [...state.currentPolygon, point]
+          const tempRoom = {
+            id: 'temp-room',
+            name: 'Temporary Room',
+            polygon: testPolygon
+          }
+          
+          const validationResult = validateRoomGeometry(tempRoom, {
+            floor: currentFloor,
+            strictMode: true,
+            allowWarnings: false
+          })
+          
+          setIsValidPlacement(validationResult.valid && validationResult.severity !== 'error')
+        } else {
+          setIsValidPlacement(true)
+        }
+        
       } else if (tool === "rectangle" || tool === "circle" || tool === "triangle" || tool === "arc") {
         if (startPoint && point) {
           let testPolygon: Point[] = []
@@ -1049,22 +1104,31 @@ export function Canvas({
             testPolygon = createArcPolygon(startPoint, point)
           }
 
-          // VALIDATION STRICTE ANTI-SUPERPOSITION
+          // VALIDATION ULTRA-STRICTE ANTI-SUPERPOSITION
           const tempRoom = {
             id: 'temp-room',
             name: 'Temporary Room',
             polygon: testPolygon
           }
           
-          // Utiliser notre nouveau système de validation strict
           const validationResult = validateRoomGeometry(tempRoom, {
             floor: currentFloor,
             strictMode: true,
             allowWarnings: false
           })
           
-          setIsValidPlacement(validationResult.valid)
+          // Validation supplémentaire: aucune surface ne peut se chevaucher
+          const hasOverlap = currentFloor.rooms.some(room => 
+            polygonsIntersect(testPolygon, room.polygon)
+          )
+          
+          const isValid = validationResult.valid && 
+                         validationResult.severity !== 'error' && 
+                         !hasOverlap
+          
+          setIsValidPlacement(isValid)
         }
+        
       } else if (tool === "artwork") {
         if (startPoint && point) {
           const minX = Math.min(startPoint.x, point.x)
@@ -1072,18 +1136,40 @@ export function Canvas({
           const maxX = Math.max(startPoint.x, point.x)
           const maxY = Math.max(startPoint.y, point.y)
 
-          const corners = [
-            { x: minX, y: minY },
-            { x: maxX, y: minY },
-            { x: maxX, y: maxY },
-            { x: minX, y: maxY },
-          ]
-
-          const allInRoom = corners.every((corner) =>
-            currentFloor.rooms.some((room) => isPointInPolygon(corner, room.polygon)),
-          )
-          setIsValidPlacement(allInRoom)
+          const tempArtwork = {
+            id: 'temp-artwork',
+            name: 'Temporary Artwork',
+            xy: [minX, minY] as readonly [number, number],
+            size: [maxX - minX, maxY - minY] as readonly [number, number],
+            pdf_id: ''
+          }
+          
+          // Validation stricte des artworks
+          const validationResult = validateArtworkPlacement(tempArtwork, {
+            floor: currentFloor,
+            strictMode: true,
+            allowWarnings: false
+          })
+          
+          // Vérification supplémentaire: pas de chevauchement avec autres artworks
+          const hasOverlapWithArtworks = currentFloor.artworks.some(artwork => {
+            const [ax, ay] = artwork.xy
+            const [aWidth, aHeight] = artwork.size || [1, 1]
+            const [tempWidth, tempHeight] = tempArtwork.size
+            
+            return !(minX >= ax + aWidth || 
+                    maxX <= ax || 
+                    minY >= ay + aHeight || 
+                    maxY <= ay)
+          })
+          
+          const isValid = validationResult.valid && 
+                         validationResult.severity !== 'error' && 
+                         !hasOverlapWithArtworks
+          
+          setIsValidPlacement(isValid)
         }
+        
       } else if (tool === "door" || tool === "stairs" || tool === "elevator") {
         if (startPoint && point && wallSegmentSnap) {
           const segment = calculateWallSegment(
@@ -1092,73 +1178,72 @@ export function Canvas({
             wallSegmentSnap.segmentStart,
             wallSegmentSnap.segmentEnd,
           )
-          const occupied = isWallSegmentOccupied(
-            segment.start,
-            segment.end,
-            currentFloor.doors,
-            currentFloor.verticalLinks,
-            currentFloor.artworks,
-          )
-          setIsValidPlacement(!occupied)
-          setCreationPreview({ start: segment.start, end: segment.end, valid: !occupied })
+          
+          // Validation stricte des éléments sur mur
+          let tempElement, validationResult
+          
+          if (tool === "door") {
+            tempElement = {
+              id: 'temp-door',
+              segment: [segment.start, segment.end] as readonly [Point, Point],
+              room_a: '',
+              room_b: '',
+              width: Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y)
+            }
+            
+            validationResult = validateDoor(tempElement, {
+              floor: currentFloor,
+              strictMode: true,
+              allowWarnings: false
+            })
+          } else {
+            tempElement = {
+              id: 'temp-link',
+              type: tool as 'stairs' | 'elevator',
+              segment: [segment.start, segment.end] as readonly [Point, Point],
+              to_floor: '',
+              width: Math.hypot(segment.end.x - segment.start.x, segment.end.y - segment.start.y)
+            }
+            
+            validationResult = validateVerticalLink(tempElement, {
+              floor: currentFloor,
+              strictMode: true,
+              allowWarnings: false
+            })
+          }
+          
+          const isValid = validationResult.valid && validationResult.severity !== 'error'
+          setIsValidPlacement(isValid)
+          setCreationPreview({ start: segment.start, end: segment.end, valid: isValid })
         } else {
-          setIsValidPlacement(wallSegmentSnap !== null)
+          setIsValidPlacement(false)
           setCreationPreview(null)
         }
+        
       } else if (tool === "wall") {
         if (startPoint && point) {
-          // Essayer de snapper les points sur les murs de pièce
-          const startSnap = findRoomWallSnapPoint(startPoint, currentFloor)
-          const endSnap = findRoomWallSnapPoint(point, currentFloor)
+          // Validation simplifiée mais stricte pour les murs
+          const tempWall = createWall(startPoint, point, WALL_THICKNESS.INTERIOR, '')
+          const validation = validateWallPlacement(tempWall, currentFloor)
           
-          const actualStart = startSnap ? startSnap.snapPoint : startPoint
-          const actualEnd = endSnap ? endSnap.snapPoint : point
-
-          // Vérifier si le segment est valide pour création de mur intérieur
-          let isValid = false
-          let targetRoomId: string | undefined = undefined
-
-          // D'abord, identifier la pièce cible
-          if (startSnap) {
-            targetRoomId = startSnap.roomId
-          } else if (endSnap) {
-            targetRoomId = endSnap.roomId
-          } else {
-            // Aucun snap - vérifier si entièrement dans une pièce
-            const room = findRoomContainingSegment(actualStart, actualEnd, currentFloor)
-            if (room) {
-              targetRoomId = room.id
-            }
-          }
-
-          if (targetRoomId) {
-            const targetRoom = currentFloor.rooms.find(r => r.id === targetRoomId)
-            if (targetRoom) {
-              // Vérifications strictes pour murs intérieurs :
-              // 1. Les points non-snappés doivent être à l'intérieur de la pièce
-              const startInRoom = Boolean(startSnap || isPointInPolygon(actualStart, targetRoom.polygon))
-              const endInRoom = Boolean(endSnap || isPointInPolygon(actualEnd, targetRoom.polygon))
-              
-              // 2. Le segment entier doit rester dans la pièce (points intermédiaires)
-              const segmentInRoom = findRoomContainingSegment(actualStart, actualEnd, currentFloor)?.id === targetRoomId
-              
-              // 3. Validation standard du placement de mur
-              const tempWall = createWall(actualStart, actualEnd, WALL_THICKNESS.INTERIOR, targetRoomId)
-              const validation = validateWallPlacement(tempWall, currentFloor)
-              
-              isValid = startInRoom && endInRoom && (segmentInRoom || Boolean(startSnap || endSnap)) && validation.valid
-            }
-          }
-
+          // Vérifier qu'aucune superposition n'existe
+          const noOverlap = !currentFloor.walls.some(wall => {
+            return segmentsIntersect(startPoint, point, wall.segment[0], wall.segment[1])
+          })
+          
+          const isValid = validation.valid && noOverlap
           setIsValidPlacement(isValid)
-          setCreationPreview({ start: actualStart, end: actualEnd, valid: isValid })
+          setCreationPreview({ start: startPoint, end: point, valid: isValid })
         } else {
           setIsValidPlacement(true)
           setCreationPreview(null)
         }
+      } else {
+        // Outil non reconnu - validation par défaut
+        setIsValidPlacement(true)
       }
     },
-    [state.currentPolygon, currentFloor, wallSegmentSnap],
+    [state.currentPolygon, currentFloor, wallSegmentSnap, state.zoom],
   )
 
   const render = useCallback(() => {
@@ -1174,11 +1259,54 @@ export function Canvas({
 
     drawGrid(ctx, width, height)
 
+    // === RENDU UNIFIÉ 2D STRICT ===
+    // Tous les éléments au même niveau pour éviter les superpositions visuelles
+    // Ordre: Room backgrounds → Walls → Elements (tous au même z-index)
+    
+    // 1. Fond des pièces (arrière-plan uniquement)
     currentFloor.rooms.forEach((room) => {
       const isSelected = (state.selectedElementId === room.id && state.selectedElementType === "room") ||
                         isElementSelected(room.id, "room", state.selectedElements)
       const isHovered = hoveredElement?.type === "room" && hoveredElement.id === room.id
-      drawRoom(ctx, room, isSelected, isHovered)
+      drawRoomBackground(ctx, room, isSelected, isHovered)
+    })
+
+    // 2. Murs (infrastructure de base)
+    currentFloor.walls.forEach((wall) => {
+      const isSelected = (state.selectedElementId === wall.id && state.selectedElementType === "wall") ||
+                        isElementSelected(wall.id, "wall", state.selectedElements)
+      const isHovered = hoveredElement?.type === "wall" && hoveredElement.id === wall.id
+      drawWall(ctx, wall, isSelected, isHovered)
+    })
+
+    // 3. Tous les éléments au même niveau (aucune superposition)
+    const allElements = [
+      ...currentFloor.rooms.map(room => ({ ...room, elementType: 'room' as const })),
+      ...currentFloor.artworks.map(artwork => ({ ...artwork, elementType: 'artwork' as const })),
+      ...currentFloor.doors.map(door => ({ ...door, elementType: 'door' as const })),
+      ...currentFloor.verticalLinks.map(link => ({ ...link, elementType: 'verticalLink' as const }))
+    ]
+
+    // Rendu unifié de tous les éléments
+    allElements.forEach((element) => {
+      const isSelected = (state.selectedElementId === element.id && state.selectedElementType === element.elementType) ||
+                        isElementSelected(element.id, element.elementType, state.selectedElements)
+      const isHovered = hoveredElement?.type === element.elementType && hoveredElement.id === element.id
+      
+      switch (element.elementType) {
+        case 'room':
+          drawRoomOutline(ctx, element, isSelected, isHovered)
+          break
+        case 'artwork':
+          drawArtwork(ctx, element, isSelected, isHovered)
+          break
+        case 'door':
+          drawDoor(ctx, element, isSelected, isHovered)
+          break
+        case 'verticalLink':
+          drawVerticalLink(ctx, element, isSelected, isHovered)
+          break
+      }
     })
 
     if (isDragging && drawStartPoint && hoveredPoint) {
@@ -1426,33 +1554,7 @@ export function Canvas({
       ctx.fill()
     }
 
-    currentFloor.artworks.forEach((artwork) => {
-      const isSelected = (state.selectedElementId === artwork.id && state.selectedElementType === "artwork") ||
-                        isElementSelected(artwork.id, "artwork", state.selectedElements)
-      const isHovered = hoveredElement?.type === "artwork" && hoveredElement.id === artwork.id
-      drawArtwork(ctx, artwork, isSelected, isHovered)
-    })
 
-    currentFloor.doors.forEach((door) => {
-      const isSelected = (state.selectedElementId === door.id && state.selectedElementType === "door") ||
-                        isElementSelected(door.id, "door", state.selectedElements)
-      const isHovered = hoveredElement?.type === "door" && hoveredElement.id === door.id
-      drawDoor(ctx, door, isSelected, isHovered)
-    })
-
-    currentFloor.verticalLinks.forEach((link) => {
-      const isSelected = (state.selectedElementId === link.id && state.selectedElementType === "verticalLink") ||
-                        isElementSelected(link.id, "verticalLink", state.selectedElements)
-      const isHovered = hoveredElement?.type === "verticalLink" && hoveredElement.id === link.id
-      drawVerticalLink(ctx, link, isSelected, isHovered)
-    })
-
-    currentFloor.walls.forEach((wall) => {
-      const isSelected = (state.selectedElementId === wall.id && state.selectedElementType === "wall") ||
-                        isElementSelected(wall.id, "wall", state.selectedElements)
-      const isHovered = hoveredElement?.type === "wall" && hoveredElement.id === wall.id
-      drawWall(ctx, wall, isSelected, isHovered)
-    })
 
     if (selectionBox) {
       const start = worldToScreen(selectionBox.start.x, selectionBox.start.y)
@@ -1568,7 +1670,9 @@ export function Canvas({
     creationPreview,
     selectionBox,
     drawGrid,
-    drawRoom,
+    drawRoomBackground,
+    drawRoomOutline,
+    drawWall,
     drawArtwork,
     drawDoor,
     drawVerticalLink,
