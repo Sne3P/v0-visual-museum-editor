@@ -106,6 +106,7 @@ interface CanvasProps {
   currentFloor: Floor
   onNavigateToFloor?: (floorId: string) => void
   onRecenter?: () => void
+  onArtworkDoubleClick?: (artworkId: string) => void
 }
 
 export function Canvas({ 
@@ -114,7 +115,8 @@ export function Canvas({
   updateStateTemporary, 
   saveToHistory, 
   currentFloor, 
-  onNavigateToFloor 
+  onNavigateToFloor,
+  onArtworkDoubleClick 
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -3498,9 +3500,11 @@ export function Canvas({
         if (link?.to_floor) {
           onNavigateToFloor(link.to_floor)
         }
+      } else if (hoveredElement?.type === "artwork" && onArtworkDoubleClick) {
+        onArtworkDoubleClick(hoveredElement.id)
       }
     },
-    [hoveredElement, currentFloor, onNavigateToFloor],
+    [hoveredElement, currentFloor, onNavigateToFloor, onArtworkDoubleClick],
   )
 
   const handleWheel = useCallback(

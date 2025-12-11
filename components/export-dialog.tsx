@@ -10,6 +10,8 @@ interface ExportDialogProps {
 
 export function ExportDialog({ state, onClose }: ExportDialogProps) {
   const [copied, setCopied] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
   const [exportFormat, setExportFormat] = useState<'json' | 'sql' | 'both'>('json')
 
   // Génération d'IDs séquentiels pour les différentes entités
@@ -258,28 +260,28 @@ export function ExportDialog({ state, onClose }: ExportDialogProps) {
   // 7. Criterias (critères de filtrage/tags)
   const criterias = [
     {
-      criteria_id: criteriaIdCounter++,
+      criterias_id: criteriaIdCounter++,
       type: 'THEME',
       name: 'Art contemporain',
       description: 'Œuvres d\'art contemporain',
       image_link: '/icons/contemporary.png'
     },
     {
-      criteria_id: criteriaIdCounter++,
+      criterias_id: criteriaIdCounter++,
       type: 'DURATION',
       name: 'Visite courte (15min)',
       description: 'Parcours rapide',
       image_link: '/icons/quick.png'
     },
     {
-      criteria_id: criteriaIdCounter++,
+      criterias_id: criteriaIdCounter++,
       type: 'ACCESSIBILITY',
       name: 'Accessible PMR',
       description: 'Accessible aux personnes à mobilité réduite',
       image_link: '/icons/accessible.png'
     },
     {
-      criteria_id: criteriaIdCounter++,
+      criterias_id: criteriaIdCounter++,
       type: 'LEVEL',
       name: 'Niveau débutant',
       description: 'Adapté aux débutants',
@@ -291,7 +293,7 @@ export function ExportDialog({ state, onClose }: ExportDialogProps) {
   const oeuvre_criterias = oeuvres.flatMap((oeuvre, index) => 
     criterias.slice(0, 2 + (index % 2)).map((criteria) => ({
       oeuvre_id: oeuvre.oeuvre_id,
-      criteria_id: criteria.criteria_id
+      criterias_id: criteria.criterias_id
     }))
   )
 
@@ -301,16 +303,16 @@ export function ExportDialog({ state, onClose }: ExportDialogProps) {
   ]
 
   const criterias_guide = [
-    { generated_guide_id: 1, criteria_id: 1 },
-    { generated_guide_id: 1, criteria_id: 2 },
-    { generated_guide_id: 2, criteria_id: 3 },
-    { generated_guide_id: 2, criteria_id: 4 }
+    { generated_guide_id: 1, criterias_id: 1 },
+    { generated_guide_id: 1, criterias_id: 2 },
+    { generated_guide_id: 2, criterias_id: 3 },
+    { generated_guide_id: 2, criterias_id: 4 }
   ]
 
   const criterias_pregeneration = pregenerations.flatMap((pregen) => 
     criterias.slice(0, 2).map((criteria) => ({
       pregeneration_id: pregen.pregeneration_id,
-      criteria_id: criteria.criteria_id
+      criterias_id: criteria.criterias_id
     }))
   )
 
@@ -474,7 +476,7 @@ CREATE TABLE pregeneration (
 -- =========
 
 CREATE TABLE criterias (
-    criteria_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    criterias_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     type         TEXT NOT NULL,
     name         TEXT NOT NULL,
     description  TEXT,
@@ -483,8 +485,8 @@ CREATE TABLE criterias (
 
 CREATE TABLE oeuvre_criterias (
     oeuvre_id   INTEGER NOT NULL REFERENCES oeuvres(oeuvre_id),
-    criteria_id INTEGER NOT NULL REFERENCES criterias(criteria_id),
-    PRIMARY KEY (oeuvre_id, criteria_id)
+    criterias_id INTEGER NOT NULL REFERENCES criterias(criterias_id),
+    PRIMARY KEY (oeuvre_id, criterias_id)
 );
 
 CREATE TABLE generated_guide (
@@ -493,14 +495,14 @@ CREATE TABLE generated_guide (
 
 CREATE TABLE criterias_guide (
     generated_guide_id INTEGER NOT NULL REFERENCES generated_guide(generated_guide_id),
-    criteria_id        INTEGER NOT NULL REFERENCES criterias(criteria_id),
-    PRIMARY KEY (generated_guide_id, criteria_id)
+    criterias_id        INTEGER NOT NULL REFERENCES criterias(criterias_id),
+    PRIMARY KEY (generated_guide_id, criterias_id)
 );
 
 CREATE TABLE criterias_pregeneration (
     pregeneration_id INTEGER NOT NULL REFERENCES pregeneration(pregeneration_id),
-    criteria_id      INTEGER NOT NULL REFERENCES criterias(criteria_id),
-    PRIMARY KEY (pregeneration_id, criteria_id)
+    criterias_id      INTEGER NOT NULL REFERENCES criterias(criterias_id),
+    PRIMARY KEY (pregeneration_id, criterias_id)
 );
 
 -- =========
@@ -554,7 +556,7 @@ CREATE TABLE qr_code (
 
       // Criterias
       ...exportData.criterias_guides.criterias.map(criteria =>
-        `INSERT INTO criterias (criteria_id, type, name, description, image_link) VALUES (${criteria.criteria_id}, '${criteria.type}', '${criteria.name}', '${criteria.description}', '${criteria.image_link}');`
+        `INSERT INTO criterias (criterias_id, type, name, description, image_link) VALUES (${criteria.criterias_id}, '${criteria.type}', '${criteria.name}', '${criteria.description}', '${criteria.image_link}');`
       )
     ].join('\n')
 
@@ -591,6 +593,46 @@ CREATE TABLE qr_code (
     a.download = filename
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleSaveToDatabase = async () => {
+    setSaving(true)
+    setSaveSuccess(false)
+    
+    try {
+      const response = await fetch('/api/save-to-db', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          exportData: exportData
+        }),
+      })
+
+      const result = await response.json()
+      
+      if (response.ok) {
+        setSaveSuccess(true)
+        setTimeout(() => setSaveSuccess(false), 3000)
+        
+        // Afficher le résumé des données insérées
+        if (result.inserted) {
+          const summary = Object.entries(result.inserted)
+            .map(([key, count]) => `${count} ${key}`)
+            .join(', ')
+          console.log(`✅ Données insérées: ${summary}`)
+        }
+      } else {
+        console.error('Erreur lors de la sauvegarde:', result.error)
+        alert(`Erreur PostgreSQL: ${result.error}\n\nDétails: ${result.details || ''}`)
+      }
+    } catch (error) {
+      console.error('Erreur réseau:', error)
+      alert('Erreur de connexion lors de la sauvegarde dans PostgreSQL')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -654,6 +696,13 @@ CREATE TABLE qr_code (
         </pre>
 
         <div className="flex gap-2">
+          <button
+            onClick={handleSaveToDatabase}
+            disabled={saving}
+            className="rounded bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
+          >
+            {saving ? "Sauvegarde PostgreSQL..." : saveSuccess ? "✅ Sauvegardé dans PostgreSQL!" : "💾 Sauvegarder dans PostgreSQL"}
+          </button>
           <button
             onClick={handleCopy}
             className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:opacity-90"

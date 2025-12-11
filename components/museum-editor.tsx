@@ -6,7 +6,8 @@ import { Toolbar } from "./toolbar"
 import { FloorTabs } from "./floor-tabs"
 import { PropertiesPanel } from "./properties-panel"
 import { ExportDialog } from "./export-dialog"
-import type { EditorState, Tool, Floor, MeasurementDisplay } from "@/lib/types"
+import { ArtworkPdfDialog } from "./artwork-pdf-dialog"
+import type { EditorState, Tool, Floor, MeasurementDisplay, Artwork } from "@/lib/types"
 import { calculatePolygonAreaInMeters, getPolygonCenter } from "@/lib/geometry"
 import { v4 as uuidv4 } from "uuid"
 
@@ -46,6 +47,7 @@ export function MuseumEditor() {
   })
 
   const [showExport, setShowExport] = useState(false)
+  const [pdfDialogArtwork, setPdfDialogArtwork] = useState<Artwork | null>(null)
 
   const currentFloor = state.floors.find((f) => f.id === state.currentFloorId)!
 
@@ -175,6 +177,49 @@ export function MuseumEditor() {
     },
     [updateState],
   )
+
+  // Fonction pour gérer l'ouverture du dialogue PDF
+  const handleArtworkDoubleClick = useCallback((artworkId: string) => {
+    const artwork = currentFloor.artworks.find(a => a.id === artworkId)
+    if (artwork) {
+      setPdfDialogArtwork(artwork)
+    }
+  }, [currentFloor.artworks])
+
+  // Fonction pour sauvegarder le PDF d'une œuvre
+  const handleSavePdfToArtwork = useCallback(async (artworkId: string, pdfFile: File | null, pdfUrl: string) => {
+    const newFloors = state.floors.map(floor => {
+      if (floor.id !== state.currentFloorId) return floor
+      
+      return {
+        ...floor,
+        artworks: floor.artworks.map(artwork => {
+          if (artwork.id !== artworkId) return artwork
+          
+          return {
+            ...artwork,
+            pdfLink: pdfUrl
+          }
+        })
+      }
+    })
+
+    updateStateWithMeasurements({ floors: newFloors }, true, `Assigner PDF à l'œuvre ${artworkId}`)
+
+    // Ici, dans un vrai projet, vous pourriez aussi uploader le fichier vers un serveur
+    if (pdfFile) {
+      console.log(`PDF "${pdfFile.name}" assigné à l'œuvre ${artworkId}`)
+      
+      // Simulation d'un upload vers la base de données
+      try {
+        // TODO: Implémenter l'upload réel vers le serveur et la base de données
+        // await uploadPdfToServer(pdfFile, artworkId)
+        console.log("PDF sauvegardé avec succès (simulation)")
+      } catch (error) {
+        console.error("Erreur lors de la sauvegarde du PDF:", error)
+      }
+    }
+  }, [state.floors, state.currentFloorId, updateStateWithMeasurements])
 
   const recenterView = useCallback(() => {
     if (currentFloor.rooms.length === 0) {
@@ -429,6 +474,7 @@ export function MuseumEditor() {
             currentFloor={currentFloor}
             onNavigateToFloor={switchFloor}
             onRecenter={recenterView}
+            onArtworkDoubleClick={handleArtworkDoubleClick}
           />
         </div>
 
@@ -442,6 +488,14 @@ export function MuseumEditor() {
       {/* Context menu is rendered inside the Canvas (so it has x/y coordinates). */}
 
       {showExport && <ExportDialog state={state} onClose={() => setShowExport(false)} />}
+      
+      {pdfDialogArtwork && (
+        <ArtworkPdfDialog
+          artwork={pdfDialogArtwork}
+          onClose={() => setPdfDialogArtwork(null)}
+          onSave={handleSavePdfToArtwork}
+        />
+      )}
     </div>
   )
 }
