@@ -5,7 +5,6 @@ import { Canvas } from "./canvas"
 import { Toolbar } from "./toolbar"
 import { FloorTabs } from "./floor-tabs"
 import { PropertiesPanel } from "./properties-panel"
-import { ExportDialog } from "./export-dialog"
 import { ArtworkPdfDialog } from "./artwork-pdf-dialog"
 import type { EditorState, Tool, Floor, MeasurementDisplay, Artwork } from "@/lib/types"
 import { calculatePolygonAreaInMeters, getPolygonCenter } from "@/lib/geometry"
@@ -46,10 +45,314 @@ export function MuseumEditor() {
     },
   })
 
-  const [showExport, setShowExport] = useState(false)
   const [pdfDialogArtwork, setPdfDialogArtwork] = useState<Artwork | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle')
+  const [isLoading, setIsLoading] = useState(true)
+  const [lastSaved, setLastSaved] = useState<Date | null>(null)
 
   const currentFloor = state.floors.find((f) => f.id === state.currentFloorId)!
+
+  // Fonction pour charger les données depuis SQLite
+  const loadFromDatabase = useCallback(async () => {
+    try {
+      setIsLoading(true)
+      const response = await fetch('/api/load-from-db')
+      const result = await response.json()
+      
+      if (result.success && result.data) {
+        console.log('📥 Données reçues de l\'API:', result.data)
+        console.log('🏢 Floors dans les données:', result.data.floors?.length || 0)
+        if (result.data.floors && result.data.floors.length > 0) {
+          console.log('🏠 Premier floor:', result.data.floors[0])
+        }
+        setState(result.data)
+        console.log('✅ Plan chargé depuis SQLite:', result.loaded)
+      } else {
+        console.log('ℹ️ Aucune donnée trouvée, utilisation du plan par défaut')
+        console.log('❌ Résultat de l\'API:', result)
+      }
+    } catch (error) {
+      console.error('❌ Erreur lors du chargement:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }, [])
+
+  // Fonction pour sauvegarder (automatique ou manuelle)
+  const autoSave = useCallback(async (currentState: EditorState, isManual = false) => {
+    try {
+      if (isManual) setSaveStatus('saving')
+      
+      console.log('💾 Début sauvegarde:', { 
+        isManual, 
+        floors: currentState.floors.length,
+        currentFloor: currentState.currentFloorId 
+      })
+      
+      // Convertir l'état vers le format d'export
+      const exportData = convertStateToExportFormat(currentState)
+      
+      const response = await fetch('/api/save-to-db', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exportData })
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        setLastSaved(new Date())
+        if (isManual) {
+          setSaveStatus('success')
+          setTimeout(() => setSaveStatus('idle'), 2000) // Reset après 2 secondes
+        }
+        console.log('✅ Sauvegarde réussie:', result.inserted)
+      } else {
+        throw new Error(result.error || 'Erreur de sauvegarde')
+      }
+    } catch (error) {
+      console.error('❌ Erreur sauvegarde:', error)
+      if (isManual) {
+        setSaveStatus('error')
+        setTimeout(() => setSaveStatus('idle'), 3000) // Reset après 3 secondes
+      }
+    }
+  }, [])
+
+  // Fonction de sauvegarde manuelle
+  const handleManualSave = useCallback(async () => {
+    console.log('💾 Sauvegarde manuelle déclenchée')
+    await autoSave(state, true)
+  }, [state, autoSave])
+
+  // Charger au démarrage
+  useEffect(() => {
+    loadFromDatabase()
+  }, [loadFromDatabase])
+
+  // Auto-sauvegarde désactivée temporairement pour debug
+  // useEffect(() => {
+  //   if (!isLoading && state.floors.length > 0) {
+  //     const timeoutId = setTimeout(() => {
+  //       autoSave(state)
+  //     }, 5000) // Sauvegarde après 5 secondes d'inactivité
+
+  //     return () => clearTimeout(timeoutId)
+  //   }
+  // }, [state, isLoading, autoSave])
+
+  // Fonction pour convertir l'état en format d'export
+  const convertStateToExportFormat = useCallback((currentState: EditorState) => {
+    console.log('🔄 Conversion de l\'état pour export:', {
+      floors: currentState.floors.length,
+      currentFloorId: currentState.currentFloorId
+    })
+    
+    let entityIdCounter = 1
+    let pointIdCounter = 1
+    let relationIdCounter = 1
+    let oeuvreIdCounter = 1
+    let chunkIdCounter = 1
+
+    // 1. Plans
+    const plans = currentState.floors.map((floor, index) => ({
+      plan_id: index + 1,
+      nom: floor.name || `Plan ${index + 1}`,
+      description: `Plan de niveau ${floor.name}`,
+      date_creation: new Date().toISOString().split('T')[0]
+    }))
+
+    console.log('📊 Plans générés:', plans)
+
+    // 2. Entities + Points
+    const entities: any[] = []
+    const points: any[] = []
+    const oeuvres: any[] = []
+    const chunks: any[] = []
+    const relations: any[] = []
+
+    currentState.floors.forEach((floor, floorIndex) => {
+      const planId = floorIndex + 1
+      console.log(`🏢 Floor ${floorIndex} (${floor.name}):`, {
+        rooms: floor.rooms?.length || 0,
+        walls: floor.walls?.length || 0,
+        artworks: floor.artworks?.length || 0
+      })
+
+      // Entités ROOM (salles)
+      floor.rooms.forEach((room) => {
+        const entityId = entityIdCounter++
+        
+        entities.push({
+          entity_id: entityId,
+          plan_id: planId,
+          name: `Salle ${entityId}`,
+          entity_type: 'ROOM',
+          description: `Salle du musée`,
+          oeuvre_id: null
+        })
+
+        // Points de la room (polygon)
+        room.polygon.forEach((point, index) => {
+          points.push({
+            point_id: pointIdCounter++,
+            entity_id: entityId,
+            x: point.x,
+            y: point.y,
+            ordre: index + 1
+          })
+        })
+      })
+
+      // Artworks séparées
+      floor.artworks.forEach((artwork) => {
+        const oeuvreId = oeuvreIdCounter++
+        
+        // Gérer les PDF temporaires
+        let finalPdfLink = artwork.pdfLink || null
+        if (artwork.tempPdfFile && artwork.tempPdfBase64) {
+          // Si un PDF temporaire existe, générer un nom de fichier et l'utiliser
+          const fileName = `artwork_${artwork.id}_${Date.now()}.pdf`
+          finalPdfLink = `/uploads/pdfs/${fileName}`
+        }
+        
+        oeuvres.push({
+          oeuvre_id: oeuvreId,
+          title: artwork.name || 'Sans titre',
+          artist: 'Artiste inconnu',
+          description: '',
+          image_link: null,
+          pdf_link: finalPdfLink,
+          room: 1 // ID de salle par défaut
+        })
+
+        // Ajouter chunks si nécessaire
+        if (artwork.name) {
+          chunks.push({
+            chunk_id: chunkIdCounter++,
+            chunk_text: artwork.name,
+            oeuvre_id: oeuvreId
+          })
+        }
+      })
+
+      // Entités DOOR (portes)
+      floor.doors.forEach((door) => {
+        const entityId = entityIdCounter++
+        entities.push({
+          entity_id: entityId,
+          plan_id: planId,
+          name: `Porte ${door.id}`,
+          entity_type: 'DOOR',
+          description: `Porte entre ${door.room_a} et ${door.room_b}`,
+          oeuvre_id: null
+        })
+
+        // Points de la porte
+        door.segment.forEach((point, index) => {
+          points.push({
+            point_id: pointIdCounter++,
+            entity_id: entityId,
+            x: point.x,
+            y: point.y,
+            ordre: index + 1
+          })
+        })
+      })
+
+      // Entités VERTICAL_LINK (escaliers)
+      floor.verticalLinks.forEach((link) => {
+        const entityId = entityIdCounter++
+        entities.push({
+          entity_id: entityId,
+          plan_id: planId,
+          name: `${link.type === 'stairs' ? 'Escalier' : 'Ascenseur'} ${link.id}`,
+          entity_type: 'VERTICAL_LINK',
+          description: `Liaison verticale vers étage ${link.to_floor}`,
+          oeuvre_id: null
+        })
+
+        // Points du lien vertical
+        link.segment.forEach((point, index) => {
+          points.push({
+            point_id: pointIdCounter++,
+            entity_id: entityId,
+            x: point.x,
+            y: point.y,
+            ordre: index + 1
+          })
+        })
+      })
+
+      // Entités WALL (murs)
+      floor.walls.forEach((wall) => {
+        const entityId = entityIdCounter++
+        entities.push({
+          entity_id: entityId,
+          plan_id: planId,
+          name: `Mur ${entityId}`,
+          entity_type: 'WALL',
+          description: 'Mur du musée',
+          oeuvre_id: null
+        })
+
+        // Points du mur
+        points.push({
+          point_id: pointIdCounter++,
+          entity_id: entityId,
+          x: wall.start.x,
+          y: wall.start.y,
+          ordre: 1
+        })
+        points.push({
+          point_id: pointIdCounter++,
+          entity_id: entityId,
+          x: wall.end.x,
+          y: wall.end.y,
+          ordre: 2
+        })
+      })
+    })
+
+    // Collecte des PDF temporaires à sauvegarder
+    const tempPdfs: Array<{ filename: string; base64: string }> = []
+    currentState.floors.forEach(floor => {
+      floor.artworks.forEach(artwork => {
+        if (artwork.tempPdfFile && artwork.tempPdfBase64) {
+          const fileName = `artwork_${artwork.id}_${Date.now()}.pdf`
+          tempPdfs.push({
+            filename: fileName,
+            base64: artwork.tempPdfBase64
+          })
+        }
+      })
+    })
+
+    const result = {
+      plan_editor: {
+        plans,
+        entities,
+        points,
+        relations
+      },
+      oeuvres_contenus: {
+        oeuvres,
+        chunks
+      },
+      temp_pdfs: tempPdfs,
+      criterias_guides: {
+        criterias: []
+      }
+    }
+
+    console.log('📤 Résultat final de la conversion:', {
+      plans: result.plan_editor.plans.length,
+      entities: result.plan_editor.entities.length,
+      points: result.plan_editor.points.length,
+      oeuvres: result.oeuvres_contenus.oeuvres.length
+    })
+
+    return result
+  }, [])
 
   // Système d'historique amélioré
   const saveToHistory = useCallback((newState: EditorState, actionDescription?: string) => {
@@ -140,11 +443,38 @@ export function MuseumEditor() {
     }
   }, [state, saveToHistory])
 
-  const addFloor = useCallback(() => {
-    const newFloorNum = state.floors.length + 1
+  const addFloor = useCallback((direction: 1 | -1 = 1) => {
+    // Trouver le prochain numéro d'étage
+    let newFloorNum: number
+    let newFloorName: string
+    
+    if (direction === 1) {
+      // Étage au-dessus : trouver le plus haut étage + 1
+      const maxFloorNum = state.floors
+        .map(f => {
+          const match = f.id.match(/^F(-?\d+)$/)
+          return match ? parseInt(match[1]) : 0
+        })
+        .reduce((max, num) => Math.max(max, num), 0)
+      
+      newFloorNum = maxFloorNum + 1
+      newFloorName = newFloorNum === 1 ? "Ground Floor" : `Floor ${newFloorNum}`
+    } else {
+      // Sous-sol : trouver le plus bas sous-sol - 1
+      const minFloorNum = state.floors
+        .map(f => {
+          const match = f.id.match(/^F(-?\d+)$/)
+          return match ? parseInt(match[1]) : 0
+        })
+        .reduce((min, num) => Math.min(min, num), 0)
+      
+      newFloorNum = Math.min(minFloorNum - 1, -1)
+      newFloorName = `Basement ${Math.abs(newFloorNum)}`
+    }
+    
     const newFloor: Floor = {
       id: `F${newFloorNum}`,
-      name: `Floor ${newFloorNum}`,
+      name: newFloorName,
       rooms: [],
       doors: [],
       walls: [],
@@ -153,11 +483,78 @@ export function MuseumEditor() {
       escalators: [],
       elevators: [],
     }
+    
+    // Insérer le nouvel étage à la bonne position
+    const newFloors = [...state.floors, newFloor].sort((a, b) => {
+      const aNum = parseInt(a.id.replace('F', ''))
+      const bNum = parseInt(b.id.replace('F', ''))
+      return bNum - aNum // Trier par ordre décroissant (étages les plus hauts en premier)
+    })
+    
     updateStateWithMeasurements({
-      floors: [...state.floors, newFloor],
+      floors: newFloors,
       currentFloorId: newFloor.id,
     })
   }, [state.floors, updateStateWithMeasurements])
+
+  const deleteFloor = useCallback((floorId: string) => {
+    // Vérifier qu'on ne supprime pas le dernier étage
+    if (state.floors.length <= 1) {
+      alert("Impossible de supprimer le dernier étage. Il doit y avoir au moins un étage dans le bâtiment.")
+      return
+    }
+
+    const floorToDelete = state.floors.find(f => f.id === floorId)
+    if (!floorToDelete) return
+
+    // Vérifier si l'étage contient des éléments
+    const hasElements = 
+      floorToDelete.rooms.length > 0 ||
+      floorToDelete.doors.length > 0 ||
+      floorToDelete.walls.length > 0 ||
+      floorToDelete.artworks.length > 0 ||
+      floorToDelete.verticalLinks.length > 0 ||
+      floorToDelete.escalators.length > 0 ||
+      floorToDelete.elevators.length > 0
+
+    // Message de confirmation personnalisé selon le contenu
+    let confirmMessage = `Êtes-vous sûr de vouloir supprimer l'étage "${floorToDelete.name}" ?`
+    if (hasElements) {
+      const elementCount = 
+        floorToDelete.rooms.length +
+        floorToDelete.doors.length +
+        floorToDelete.walls.length +
+        floorToDelete.artworks.length +
+        floorToDelete.verticalLinks.length +
+        floorToDelete.escalators.length +
+        floorToDelete.elevators.length
+      
+      confirmMessage += `\n\nCet étage contient ${elementCount} élément${elementCount > 1 ? 's' : ''} (pièces, portes, œuvres, etc.) qui seront définitivement supprimés.`
+    }
+    confirmMessage += "\n\nCette action est irréversible."
+
+    // Demander confirmation
+    if (!window.confirm(confirmMessage)) {
+      return
+    }
+
+    // Supprimer l'étage
+    const newFloors = state.floors.filter(f => f.id !== floorId)
+    
+    // Si on supprime l'étage actuel, passer au premier étage disponible
+    let newCurrentFloorId = state.currentFloorId
+    if (state.currentFloorId === floorId) {
+      newCurrentFloorId = newFloors[0]?.id || ''
+    }
+
+    updateStateWithMeasurements({
+      floors: newFloors,
+      currentFloorId: newCurrentFloorId,
+      selectedElementId: null,
+      selectedElementType: null,
+      selectedElements: [],
+    }, true, `Supprimer étage "${floorToDelete.name}"`)
+  }, [state.floors, state.currentFloorId, updateStateWithMeasurements])
 
   const switchFloor = useCallback(
     (floorId: string) => {
@@ -187,7 +584,7 @@ export function MuseumEditor() {
   }, [currentFloor.artworks])
 
   // Fonction pour sauvegarder le PDF d'une œuvre
-  const handleSavePdfToArtwork = useCallback(async (artworkId: string, pdfFile: File | null, pdfUrl: string) => {
+  const handleSavePdfToArtwork = useCallback(async (artworkId: string, pdfFile: File | null, pdfUrl: string, title?: string, base64?: string) => {
     const newFloors = state.floors.map(floor => {
       if (floor.id !== state.currentFloorId) return floor
       
@@ -198,26 +595,19 @@ export function MuseumEditor() {
           
           return {
             ...artwork,
-            pdfLink: pdfUrl
+            pdfLink: pdfUrl,
+            name: title || artwork.name,
+            tempPdfFile: pdfFile,
+            tempPdfBase64: base64
           }
         })
       }
     })
 
-    updateStateWithMeasurements({ floors: newFloors }, true, `Assigner PDF à l'œuvre ${artworkId}`)
+    updateStateWithMeasurements({ floors: newFloors }, true, `Assigner PDF et titre à l'œuvre ${artworkId}`)
 
-    // Ici, dans un vrai projet, vous pourriez aussi uploader le fichier vers un serveur
     if (pdfFile) {
-      console.log(`PDF "${pdfFile.name}" assigné à l'œuvre ${artworkId}`)
-      
-      // Simulation d'un upload vers la base de données
-      try {
-        // TODO: Implémenter l'upload réel vers le serveur et la base de données
-        // await uploadPdfToServer(pdfFile, artworkId)
-        console.log("PDF sauvegardé avec succès (simulation)")
-      } catch (error) {
-        console.error("Erreur lors de la sauvegarde du PDF:", error)
-      }
+      console.log(`PDF "${pdfFile.name}" et titre "${title}" assignés temporairement à l'œuvre ${artworkId}`)
     }
   }, [state.floors, state.currentFloorId, updateStateWithMeasurements])
 
@@ -368,7 +758,17 @@ export function MuseumEditor() {
               />
             </svg>
           </div>
-          <h1 className="text-lg font-semibold">Museum Floor Plan Editor</h1>
+          <div className="flex flex-col">
+            <h1 className="text-lg font-semibold">Museum Floor Plan Editor</h1>
+            {isLoading && (
+              <span className="text-xs text-muted-foreground">Chargement du plan...</span>
+            )}
+            {!isLoading && lastSaved && (
+              <span className="text-xs text-green-600">
+                ✅ Sauvegardé automatiquement {lastSaved.toLocaleTimeString()}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -437,10 +837,20 @@ export function MuseumEditor() {
           </button>
 
           <button
-            onClick={() => setShowExport(true)}
-            className="rounded bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:opacity-90"
+            onClick={() => autoSave(state, true)}
+            disabled={saveStatus === 'saving'}
+            className={`rounded px-4 py-2 text-sm font-medium transition-colors ${
+              saveStatus === 'success' 
+                ? 'bg-green-600 text-white' 
+                : saveStatus === 'error'
+                ? 'bg-red-600 text-white'
+                : 'bg-accent text-accent-foreground hover:opacity-90'
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            Export JSON
+            {saveStatus === 'saving' && '⏳ Sauvegarde...'}
+            {saveStatus === 'success' && '✅ Sauvegardé !'}
+            {saveStatus === 'error' && '❌ Erreur'}
+            {saveStatus === 'idle' && '💾 Sauvegarder'}
           </button>
         </div>
       </header>
@@ -464,6 +874,7 @@ export function MuseumEditor() {
             currentFloorId={state.currentFloorId}
             onSwitchFloor={switchFloor}
             onAddFloor={addFloor}
+            onDeleteFloor={deleteFloor}
           />
 
           <Canvas
@@ -486,8 +897,6 @@ export function MuseumEditor() {
       </div>
 
       {/* Context menu is rendered inside the Canvas (so it has x/y coordinates). */}
-
-      {showExport && <ExportDialog state={state} onClose={() => setShowExport(false)} />}
       
       {pdfDialogArtwork && (
         <ArtworkPdfDialog

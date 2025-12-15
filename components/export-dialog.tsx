@@ -214,17 +214,34 @@ export function ExportDialog({ state, onClose }: ExportDialogProps) {
   // BLOC "ŒUVRES & CONTENUS"
   // =========
 
+  // Collecte des PDF temporaires
+  const tempPdfs: Array<{ filename: string; base64: string }> = []
+  
   // 4. Oeuvres (données enrichies)
   const oeuvres = state.floors.flatMap((floor, floorIndex) => 
-    floor.artworks.map((artwork, artworkIndex) => ({
-      oeuvre_id: artworkIndex + 1 + floorIndex * 1000, // ID unique
-      title: artwork.name || `Œuvre ${artwork.id}`,
-      artist: "Artiste inconnu", // À enrichir selon vos données
-      description: `Œuvre exposée dans la salle`,
-      image_link: artwork.pdf_id ? `/images/${artwork.pdf_id}.jpg` : null,
-      pdf_link: artwork.pdf_id ? `/pdfs/${artwork.pdf_id}.pdf` : null,
-      room: parseInt(artwork.id.split('_')[1] || '1') // Extraction approximative du numéro de salle
-    }))
+    floor.artworks.map((artwork, artworkIndex) => {
+      // Si l'artwork a un PDF temporaire, l'ajouter à la liste et générer le nom de fichier
+      let finalPdfLink = artwork.pdfLink
+      
+      if (artwork.tempPdfFile && artwork.tempPdfBase64) {
+        const fileName = `artwork_${artwork.id}_${Date.now()}.pdf`
+        tempPdfs.push({
+          filename: fileName,
+          base64: artwork.tempPdfBase64
+        })
+        finalPdfLink = `/uploads/pdfs/${fileName}`
+      }
+      
+      return {
+        oeuvre_id: artworkIndex + 1 + floorIndex * 1000, // ID unique
+        title: artwork.name || `Œuvre ${artwork.id}`,
+        artist: "Artiste inconnu", // À enrichir selon vos données
+        description: `Œuvre exposée dans la salle`,
+        image_link: artwork.pdf_id ? `/images/${artwork.pdf_id}.jpg` : null,
+        pdf_link: finalPdfLink, // Utiliser le lien final (temporaire ou existant)
+        room: parseInt(artwork.id.split('_')[1] || '1') // Extraction approximative du numéro de salle
+      }
+    })
   )
 
   // 5. Chunk (textes liés aux œuvres)
@@ -260,28 +277,28 @@ export function ExportDialog({ state, onClose }: ExportDialogProps) {
   // 7. Criterias (critères de filtrage/tags)
   const criterias = [
     {
-      criterias_id: criteriaIdCounter++,
+      criteria_id: criteriaIdCounter++,
       type: 'THEME',
       name: 'Art contemporain',
       description: 'Œuvres d\'art contemporain',
       image_link: '/icons/contemporary.png'
     },
     {
-      criterias_id: criteriaIdCounter++,
+      criteria_id: criteriaIdCounter++,
       type: 'DURATION',
-      name: 'Visite courte (15min)',
+      name: 'Visite courte (14min)',
       description: 'Parcours rapide',
       image_link: '/icons/quick.png'
     },
     {
-      criterias_id: criteriaIdCounter++,
+      criteria_id: criteriaIdCounter++,
       type: 'ACCESSIBILITY',
       name: 'Accessible PMR',
       description: 'Accessible aux personnes à mobilité réduite',
       image_link: '/icons/accessible.png'
     },
     {
-      criterias_id: criteriaIdCounter++,
+      criteria_id: criteriaIdCounter++,
       type: 'LEVEL',
       name: 'Niveau débutant',
       description: 'Adapté aux débutants',
@@ -293,7 +310,7 @@ export function ExportDialog({ state, onClose }: ExportDialogProps) {
   const oeuvre_criterias = oeuvres.flatMap((oeuvre, index) => 
     criterias.slice(0, 2 + (index % 2)).map((criteria) => ({
       oeuvre_id: oeuvre.oeuvre_id,
-      criterias_id: criteria.criterias_id
+      criteria_id: criteria.criteria_id
     }))
   )
 
@@ -303,16 +320,16 @@ export function ExportDialog({ state, onClose }: ExportDialogProps) {
   ]
 
   const criterias_guide = [
-    { generated_guide_id: 1, criterias_id: 1 },
-    { generated_guide_id: 1, criterias_id: 2 },
-    { generated_guide_id: 2, criterias_id: 3 },
-    { generated_guide_id: 2, criterias_id: 4 }
+    { generated_guide_id: 1, criteria_id: 1 },
+    { generated_guide_id: 1, criteria_id: 2 },
+    { generated_guide_id: 2, criteria_id: 3 },
+    { generated_guide_id: 2, criteria_id: 4 }
   ]
 
   const criterias_pregeneration = pregenerations.flatMap((pregen) => 
     criterias.slice(0, 2).map((criteria) => ({
       pregeneration_id: pregen.pregeneration_id,
-      criterias_id: criteria.criterias_id
+      criteria_id: criteria.criteria_id
     }))
   )
 
@@ -354,6 +371,9 @@ export function ExportDialog({ state, onClose }: ExportDialogProps) {
       chunks,
       pregenerations
     },
+
+    // PDF temporaires à sauvegarder
+    temp_pdfs: tempPdfs,
 
     // BLOC CRITÈRES & GUIDES
     criterias_guides: {
@@ -476,7 +496,7 @@ CREATE TABLE pregeneration (
 -- =========
 
 CREATE TABLE criterias (
-    criterias_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    criteria_id  INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     type         TEXT NOT NULL,
     name         TEXT NOT NULL,
     description  TEXT,
@@ -485,8 +505,8 @@ CREATE TABLE criterias (
 
 CREATE TABLE oeuvre_criterias (
     oeuvre_id   INTEGER NOT NULL REFERENCES oeuvres(oeuvre_id),
-    criterias_id INTEGER NOT NULL REFERENCES criterias(criterias_id),
-    PRIMARY KEY (oeuvre_id, criterias_id)
+    criteria_id INTEGER NOT NULL REFERENCES criterias(criteria_id),
+    PRIMARY KEY (oeuvre_id, criteria_id)
 );
 
 CREATE TABLE generated_guide (
@@ -495,14 +515,14 @@ CREATE TABLE generated_guide (
 
 CREATE TABLE criterias_guide (
     generated_guide_id INTEGER NOT NULL REFERENCES generated_guide(generated_guide_id),
-    criterias_id        INTEGER NOT NULL REFERENCES criterias(criterias_id),
-    PRIMARY KEY (generated_guide_id, criterias_id)
+    criteria_id        INTEGER NOT NULL REFERENCES criterias(criteria_id),
+    PRIMARY KEY (generated_guide_id, criteria_id)
 );
 
 CREATE TABLE criterias_pregeneration (
     pregeneration_id INTEGER NOT NULL REFERENCES pregeneration(pregeneration_id),
-    criterias_id      INTEGER NOT NULL REFERENCES criterias(criterias_id),
-    PRIMARY KEY (pregeneration_id, criterias_id)
+    criteria_id      INTEGER NOT NULL REFERENCES criterias(criteria_id),
+    PRIMARY KEY (pregeneration_id, criteria_id)
 );
 
 -- =========
@@ -556,7 +576,7 @@ CREATE TABLE qr_code (
 
       // Criterias
       ...exportData.criterias_guides.criterias.map(criteria =>
-        `INSERT INTO criterias (criterias_id, type, name, description, image_link) VALUES (${criteria.criterias_id}, '${criteria.type}', '${criteria.name}', '${criteria.description}', '${criteria.image_link}');`
+        `INSERT INTO criterias (criteria_id, type, name, description, image_link) VALUES (${criteria.criteria_id}, '${criteria.type}', '${criteria.name}', '${criteria.description}', '${criteria.image_link}');`
       )
     ].join('\n')
 

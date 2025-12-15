@@ -564,25 +564,33 @@ export function Canvas({
       const height = size[1] * GRID_SIZE * state.zoom
 
       const isDraggingThis = draggedArtwork?.artworkId === artwork.id || resizingArtwork?.artworkId === artwork.id
+      
+      // Vérifier si l'œuvre est complète (a un titre et un PDF ou PDF temporaire)
+      const hasPdf = (artwork.pdfLink && artwork.pdfLink.trim() !== '') || (artwork.tempPdfBase64 && artwork.tempPdfBase64.trim() !== '')
+      const isComplete = artwork.name && artwork.name.trim() !== '' && hasPdf
+      
+      // Couleurs de base selon l'état de complétude
+      const baseStrokeColor = isComplete ? "rgb(59, 130, 246)" : "rgb(239, 68, 68)" // bleu si complète, rouge sinon
+      const baseFillColor = isComplete ? "rgba(219, 234, 254, 0.8)" : "rgba(254, 226, 226, 0.8)" // bleu clair si complète, rouge clair sinon
 
       ctx.fillStyle =
         isDraggingThis && !isValidPlacement
           ? "rgba(239, 68, 68, 0.3)"
           : isSelected
-            ? "rgba(59, 130, 246, 0.3)"
+            ? (isComplete ? "rgba(59, 130, 246, 0.3)" : "rgba(239, 68, 68, 0.3)")
             : isHovered
-              ? "rgba(59, 130, 246, 0.2)"
-              : "rgba(219, 234, 254, 0.8)"
+              ? (isComplete ? "rgba(59, 130, 246, 0.2)" : "rgba(239, 68, 68, 0.2)")
+              : baseFillColor
       ctx.fillRect(topLeft.x, topLeft.y, width, height)
 
       ctx.strokeStyle =
         isDraggingThis && !isValidPlacement
           ? "rgb(239, 68, 68)"
           : isSelected
-            ? "rgb(59, 130, 246)"
+            ? baseStrokeColor
             : isHovered
-              ? "rgb(96, 165, 250)"
-              : "rgb(59, 130, 246)"
+              ? (isComplete ? "rgb(96, 165, 250)" : "rgb(248, 113, 113)")
+              : baseStrokeColor
       ctx.lineWidth = isSelected ? 2.5 : isHovered ? 2 : 1
       ctx.strokeRect(topLeft.x, topLeft.y, width, height)
 
@@ -604,13 +612,13 @@ export function Canvas({
           ctx.arc(handle.x, handle.y, handleSize, 0, Math.PI * 2)
           ctx.fillStyle = "white"
           ctx.fill()
-          ctx.strokeStyle = "rgb(59, 130, 246)"
+          ctx.strokeStyle = baseStrokeColor
           ctx.lineWidth = 2
           ctx.stroke()
         })
       }
 
-      ctx.fillStyle = "rgb(59, 130, 246)"
+      ctx.fillStyle = baseStrokeColor
       ctx.font = `${14 * state.zoom}px sans-serif`
       ctx.textAlign = "center"
       ctx.textBaseline = "middle"

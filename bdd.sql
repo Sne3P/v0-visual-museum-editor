@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS points (
 CREATE TABLE IF NOT EXISTS chunk (
     chunk_id SERIAL PRIMARY KEY,
     chunk_text TEXT,
+    chunk_index INTEGER DEFAULT 0,
     oeuvre_id INTEGER NOT NULL,
 
     CONSTRAINT fk_chunk_oeuvre

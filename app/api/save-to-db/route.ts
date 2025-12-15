@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { executeTransaction } from '@/lib/database'
+import { getDatabase, runQuery } from '@/lib/database-sqlite'
+import { writeFile, mkdir } from 'fs/promises'
+import { join } from 'path'
 
 interface ExportData {
   plan_editor: {
@@ -47,9 +49,13 @@ interface ExportData {
       oeuvre_id: number
     }>
   }
+  temp_pdfs?: Array<{
+    filename: string
+    base64: string
+  }>
   criterias_guides: {
     criterias: Array<{
-      criterias_id: number
+      criteria_id: number
       type: string
       name: string
       description: string
@@ -60,81 +66,145 @@ interface ExportData {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('📥 Réception demande de sauvegarde')
     const body = await request.json()
     const { exportData }: { exportData: ExportData } = body
 
     if (!exportData) {
+      console.log('❌ Données d\'export manquantes')
       return NextResponse.json({ error: 'Données d\'export manquantes' }, { status: 400 })
     }
 
-    // Préparer toutes les requêtes d'insertion
-    const queries: Array<{ text: string, params?: any[] }> = []
+    // Log du JSON complet pour debug
+    console.log('🔍 JSON exportData complet:', JSON.stringify(exportData, null, 2))
 
-    // Vider les tables dans le bon ordre (contraintes de clé étrangère)
-    queries.push({ text: 'TRUNCATE TABLE criterias_pregeneration, criterias_guide, oeuvre_criterias, chunk, pregeneration, relations, points, entities, plans, oeuvres, criterias RESTART IDENTITY CASCADE' })
+    console.log('📊 Données reçues:', {
+      plans: exportData.plan_editor?.plans?.length || 0,
+      entities: exportData.plan_editor?.entities?.length || 0,
+      points: exportData.plan_editor?.points?.length || 0,
+      oeuvres: exportData.oeuvres_contenus?.oeuvres?.length || 0
+    })
 
-    // Insérer les plans
-    for (const plan of exportData.plan_editor.plans) {
-      queries.push({
-        text: 'INSERT INTO plans (nom, description, date_creation) VALUES ($1, $2, $3)',
-        params: [plan.nom, plan.description, plan.date_creation]
-      })
+    // Traiter les PDF temporaires s'ils existent
+    let processedPdfs = 0
+    if (exportData.temp_pdfs && exportData.temp_pdfs.length > 0) {
+      try {
+        // Assurer que le dossier de destination existe
+        const uploadsDir = join(process.cwd(), 'public', 'uploads', 'pdfs')
+        await mkdir(uploadsDir, { recursive: true })
+
+        // Sauvegarder chaque PDF temporaire
+        for (const tempPdf of exportData.temp_pdfs) {
+          const buffer = Buffer.from(tempPdf.base64, 'base64')
+          const filePath = join(uploadsDir, tempPdf.filename)
+          await writeFile(filePath, buffer)
+          processedPdfs++
+          console.log(`💾 PDF sauvegardé: ${tempPdf.filename}`)
+        }
+      } catch (error) {
+        console.error('Erreur lors de la sauvegarde des PDF:', error)
+        return NextResponse.json({ 
+          error: 'Erreur lors de la sauvegarde des PDF temporaires',
+          details: error instanceof Error ? error.message : 'Erreur inconnue'
+        }, { status: 500 })
+      }
     }
 
-    // Insérer les œuvres
-    for (const oeuvre of exportData.oeuvres_contenus.oeuvres) {
-      queries.push({
-        text: 'INSERT INTO oeuvres (title, artist, description, image_link, pdf_link, room) VALUES ($1, $2, $3, $4, $5, $6)',
-        params: [oeuvre.title, oeuvre.artist, oeuvre.description, oeuvre.image_link, oeuvre.pdf_link, oeuvre.room]
-      })
-    }
+    const db = await getDatabase()
 
-    // Insérer les critères
-    for (const criteria of exportData.criterias_guides.criterias) {
-      queries.push({
-        text: 'INSERT INTO criterias (type, name, description, image_link) VALUES ($1, $2, $3, $4)',
-        params: [criteria.type, criteria.name, criteria.description, criteria.image_link]
-      })
-    }
+    // Exécuter dans une transaction SQLite
+    await new Promise<void>((resolve, reject) => {
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION')
 
-    // Insérer les entités
-    for (const entity of exportData.plan_editor.entities) {
-      queries.push({
-        text: 'INSERT INTO entities (plan_id, name, entity_type, description, oeuvre_id) VALUES ($1, $2, $3, $4, $5)',
-        params: [entity.plan_id, entity.name, entity.entity_type, entity.description, entity.oeuvre_id]
-      })
-    }
+        try {
+          // Vider les tables dans le bon ordre (contraintes de clé étrangère)
+          // Pour SQLite, on utilise DELETE au lieu de TRUNCATE
+          const tablesToClear = [
+            'criterias_pregeneration',
+            'criterias_guide', 
+            'oeuvre_criterias',
+            'chunk',
+            'pregenerations',
+            'relations',
+            'points', 
+            'entities',
+            'plans',
+            'oeuvres',
+            'criterias'
+          ]
 
-    // Insérer les points
-    for (const point of exportData.plan_editor.points) {
-      queries.push({
-        text: 'INSERT INTO points (entity_id, x, y, ordre) VALUES ($1, $2, $3, $4)',
-        params: [point.entity_id, point.x, point.y, point.ordre]
-      })
-    }
+          for (const table of tablesToClear) {
+            db.run(`DELETE FROM ${table}`)
+          }
 
-    // Insérer les relations
-    for (const relation of exportData.plan_editor.relations) {
-      queries.push({
-        text: 'INSERT INTO relations (source_id, cible_id, type_relation) VALUES ($1, $2, $3)',
-        params: [relation.source_id, relation.cible_id, relation.type_relation]
-      })
-    }
+          // Insérer les plans
+          const insertPlan = db.prepare('INSERT INTO plans (nom, description, date_creation) VALUES (?, ?, ?)')
+          for (const plan of exportData.plan_editor.plans) {
+            insertPlan.run(plan.nom, plan.description, plan.date_creation)
+          }
+          insertPlan.finalize()
 
-    // Insérer les chunks
-    for (const chunk of exportData.oeuvres_contenus.chunks) {
-      queries.push({
-        text: 'INSERT INTO chunk (chunk_text, oeuvre_id) VALUES ($1, $2)',
-        params: [chunk.chunk_text, chunk.oeuvre_id]
-      })
-    }
+          // Insérer les œuvres
+          const insertOeuvre = db.prepare('INSERT INTO oeuvres (title, artist, description, image_link, pdf_link, room) VALUES (?, ?, ?, ?, ?, ?)')
+          for (const oeuvre of exportData.oeuvres_contenus.oeuvres) {
+            insertOeuvre.run(oeuvre.title, oeuvre.artist, oeuvre.description, oeuvre.image_link, oeuvre.pdf_link, oeuvre.room)
+          }
+          insertOeuvre.finalize()
 
-    // Exécuter toutes les requêtes dans une transaction
-    await executeTransaction(queries)
+          // Insérer les critères
+          const insertCriteria = db.prepare('INSERT INTO criterias (type, name, description, image_link) VALUES (?, ?, ?, ?)')
+          for (const criteria of exportData.criterias_guides.criterias) {
+            insertCriteria.run(criteria.type, criteria.name, criteria.description, criteria.image_link)
+          }
+          insertCriteria.finalize()
+
+          // Insérer les entités
+          const insertEntity = db.prepare('INSERT INTO entities (plan_id, name, entity_type, description, oeuvre_id) VALUES (?, ?, ?, ?, ?)')
+          for (const entity of exportData.plan_editor.entities) {
+            insertEntity.run(entity.plan_id, entity.name, entity.entity_type, entity.description, entity.oeuvre_id)
+          }
+          insertEntity.finalize()
+
+          // Insérer les points
+          const insertPoint = db.prepare('INSERT INTO points (entity_id, x, y, ordre) VALUES (?, ?, ?, ?)')
+          for (const point of exportData.plan_editor.points) {
+            insertPoint.run(point.entity_id, point.x, point.y, point.ordre)
+          }
+          insertPoint.finalize()
+
+          // Insérer les relations
+          const insertRelation = db.prepare('INSERT INTO relations (source_id, cible_id, type_relation) VALUES (?, ?, ?)')
+          for (const relation of exportData.plan_editor.relations) {
+            insertRelation.run(relation.source_id, relation.cible_id, relation.type_relation)
+          }
+          insertRelation.finalize()
+
+          // Insérer les chunks
+          const insertChunk = db.prepare('INSERT INTO chunk (chunk_text, oeuvre_id) VALUES (?, ?)')
+          for (const chunk of exportData.oeuvres_contenus.chunks) {
+            insertChunk.run(chunk.chunk_text, chunk.oeuvre_id)
+          }
+          insertChunk.finalize()
+
+          db.run('COMMIT', (err) => {
+            if (err) {
+              reject(err)
+            } else {
+              resolve()
+            }
+          })
+
+        } catch (error) {
+          db.run('ROLLBACK')
+          reject(error)
+        }
+      })
+    })
 
     return NextResponse.json({ 
       success: true, 
-      message: 'Données sauvegardées avec succès dans PostgreSQL',
+      message: 'Données sauvegardées avec succès dans SQLite',
       inserted: {
         plans: exportData.plan_editor.plans.length,
         entities: exportData.plan_editor.entities.length,
@@ -142,14 +212,15 @@ export async function POST(request: NextRequest) {
         relations: exportData.plan_editor.relations.length,
         oeuvres: exportData.oeuvres_contenus.oeuvres.length,
         chunks: exportData.oeuvres_contenus.chunks.length,
-        criterias: exportData.criterias_guides.criterias.length
+        criterias: exportData.criterias_guides.criterias.length,
+        pdfs: processedPdfs
       }
     })
 
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde PostgreSQL:', error)
+    console.error('Erreur lors de la sauvegarde SQLite:', error)
     return NextResponse.json({ 
-      error: 'Erreur lors de la sauvegarde dans PostgreSQL',
+      error: 'Erreur lors de la sauvegarde dans SQLite',
       details: error instanceof Error ? error.message : 'Erreur inconnue'
     }, { status: 500 })
   }

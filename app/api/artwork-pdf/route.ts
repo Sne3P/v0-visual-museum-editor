@@ -6,6 +6,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const artworkId = formData.get('artworkId') as string
     const pdfFile = formData.get('pdfFile') as File
+    const artworkTitle = formData.get('artworkTitle') as string
     
     if (!artworkId) {
       return NextResponse.json({ error: 'ID de l\'œuvre manquant' }, { status: 400 })
@@ -14,37 +15,39 @@ export async function POST(request: NextRequest) {
     let pdfLink = ''
     
     if (pdfFile) {
-      // Dans un vrai projet, vous uploaderiez le fichier vers un serveur de fichiers
-      // Ici on simule en générant un lien
+      // Sauvegarder le fichier dans le dossier public/uploads/pdfs
       const timestamp = Date.now()
-      const fileName = `${artworkId}_${timestamp}_${pdfFile.name}`
+      const fileName = `${artworkId}_${timestamp}_${pdfFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
       pdfLink = `/uploads/pdfs/${fileName}`
       
-      // TODO: Implémenter l'upload réel du fichier
-      // Par exemple, vers AWS S3, Google Cloud Storage, ou un serveur de fichiers
-      console.log(`Simulation d'upload: ${fileName} (${pdfFile.size} bytes)`)
+      try {
+        const bytes = await pdfFile.arrayBuffer()
+        const buffer = Buffer.from(bytes)
+        
+        // Écrire le fichier sur le disque
+        const fs = require('fs')
+        const path = require('path')
+        const filePath = path.join(process.cwd(), 'public', 'uploads', 'pdfs', fileName)
+        
+        fs.writeFileSync(filePath, buffer)
+        console.log(`Fichier sauvegardé: ${fileName} (${pdfFile.size} bytes)`)
+      } catch (writeError) {
+        console.error('Erreur lors de l\'écriture du fichier:', writeError)
+        throw new Error('Erreur lors de la sauvegarde du fichier PDF')
+      }
     }
 
-    // Mettre à jour la base de données PostgreSQL
-    const queries = [
-      {
-        text: `UPDATE oeuvres SET pdf_link = $1 WHERE oeuvre_id = (
-          SELECT oeuvre_id FROM entities 
-          WHERE entity_type = 'ARTWORK' 
-          AND entities.entity_id = $2
-          LIMIT 1
-        )`,
-        params: [pdfLink || null, artworkId]
-      }
-    ]
-
-    await executeTransaction(queries)
+    // Note: Pour l'instant, nous ne mettons pas à jour la base de données directement
+    // car les œuvres n'existent en BDD qu'après un export complet.
+    // Le PDF et le titre seront sauvegardés dans l'état local de l'application et inclus lors de l'export.
+    console.log(`PDF associé à l'œuvre "${artworkTitle}" (${artworkId}): ${pdfLink}`)
 
     return NextResponse.json({ 
       success: true, 
-      message: pdfFile ? 'PDF uploadé et assigné avec succès' : 'PDF supprimé avec succès',
+      message: pdfFile ? 'PDF et titre uploadés avec succès' : 'PDF supprimé avec succès',
       pdfLink: pdfLink || null,
-      artworkId
+      artworkId,
+      artworkTitle
     })
 
   } catch (error) {
@@ -65,20 +68,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'ID de l\'œuvre manquant' }, { status: 400 })
     }
 
-    // Récupérer le PDF associé à l'œuvre depuis la base de données
-    const queries = [
-      {
-        text: `SELECT o.pdf_link 
-               FROM oeuvres o
-               INNER JOIN entities e ON e.oeuvre_id = o.oeuvre_id
-               WHERE e.entity_id = $1 AND e.entity_type = 'ARTWORK'
-               LIMIT 1`,
-        params: [artworkId]
-      }
-    ]
-
-    const result = await executeTransaction(queries)
-    const pdfLink = result.rows?.[0]?.pdf_link || null
+    // Note: Pour l'instant, nous ne récupérons pas depuis la base de données
+    // car les œuvres n'existent en BDD qu'après un export complet.
+    // Les PDFs sont stockés dans l'état local de l'application.
+    const pdfLink = null // Sera récupéré depuis l'état local
 
     return NextResponse.json({ 
       success: true, 

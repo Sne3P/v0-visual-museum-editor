@@ -1,14 +1,14 @@
 "use client"
 
 import type { Floor } from "@/lib/types"
-import { Plus, X, Copy, ArrowUp, ArrowDown } from "lucide-react"
-import { useState } from "react"
+import { Plus, X, Copy, ArrowUp, ArrowDown, Building, Building2 } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
 
 interface FloorTabsProps {
   floors: readonly Floor[]
   currentFloorId: string
   onSwitchFloor: (floorId: string) => void
-  onAddFloor: () => void
+  onAddFloor: (direction: 1 | -1) => void
   onDeleteFloor?: (floorId: string) => void
   onDuplicateFloor?: (floorId: string) => void
   onMoveFloorUp?: (floorId: string) => void
@@ -26,11 +26,30 @@ export function FloorTabs({
   onMoveFloorDown
 }: FloorTabsProps) {
   const [showActions, setShowActions] = useState<string | null>(null)
+  const [showAddMenu, setShowAddMenu] = useState(false)
+  const addMenuRef = useRef<HTMLDivElement>(null)
   
   const currentFloorIndex = floors.findIndex(f => f.id === currentFloorId)
   const canMoveUp = currentFloorIndex > 0
   const canMoveDown = currentFloorIndex < floors.length - 1
   const canDelete = floors.length > 1
+
+  // Fermer le menu d'ajout quand on clique à l'extérieur
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (addMenuRef.current && !addMenuRef.current.contains(event.target as Node)) {
+        setShowAddMenu(false)
+      }
+    }
+
+    if (showAddMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showAddMenu])
 
   return (
     <div className="flex items-center gap-1 border-b border-border bg-card/95 backdrop-blur-md px-4 py-2 relative z-10">
@@ -111,13 +130,43 @@ export function FloorTabs({
         </div>
       ))}
 
-      <button
-        onClick={onAddFloor}
-        className="ml-4 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-accent-foreground hover:scale-105 hover:shadow-md border border-transparent hover:border-border/50"
-        title="Ajouter un étage"
-      >
-        <Plus className="h-4 w-4" />
-      </button>
+      <div className="relative ml-4" ref={addMenuRef}>
+        <button
+          onClick={() => setShowAddMenu(!showAddMenu)}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-accent-foreground hover:scale-105 hover:shadow-md border border-transparent hover:border-border/50"
+          title="Ajouter un étage"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        
+        {showAddMenu && (
+          <div className="absolute top-full left-0 mt-1 z-50 min-w-max rounded-lg bg-card border border-border shadow-xl animate-fade-in">
+            <div className="p-1">
+              <button
+                onClick={() => {
+                  onAddFloor(1)
+                  setShowAddMenu(false)
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+              >
+                <Building2 className="h-4 w-4" />
+                Ajouter étage (+1)
+              </button>
+              
+              <button
+                onClick={() => {
+                  onAddFloor(-1)
+                  setShowAddMenu(false)
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+              >
+                <Building className="h-4 w-4" />
+                Ajouter sous-sol (-1)
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
       
       {floors.length > 0 && (
         <div className="ml-4 text-xs text-muted-foreground border-l border-border pl-4">

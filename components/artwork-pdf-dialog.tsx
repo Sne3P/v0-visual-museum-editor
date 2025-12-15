@@ -6,13 +6,14 @@ import type { Artwork } from "@/lib/types"
 interface ArtworkPdfDialogProps {
   artwork: Artwork
   onClose: () => void
-  onSave: (artworkId: string, pdfFile: File, pdfUrl: string) => void
+  onSave: (artworkId: string, pdfFile: File, pdfUrl: string, title?: string, base64?: string) => void
 }
 
 export function ArtworkPdfDialog({ artwork, onClose, onSave }: ArtworkPdfDialogProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [currentPdfUrl, setCurrentPdfUrl] = useState<string>(artwork.pdfLink || "")
+  const [artworkTitle, setArtworkTitle] = useState<string>(artwork.name || "")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -30,34 +31,32 @@ export function ArtworkPdfDialog({ artwork, onClose, onSave }: ArtworkPdfDialogP
       return
     }
 
+    if (!artworkTitle.trim()) {
+      alert("Veuillez saisir un titre pour l'œuvre")
+      return
+    }
+
     setUploading(true)
     try {
-      // Créer un FormData pour l'upload
-      const formData = new FormData()
-      formData.append('artworkId', artwork.id)
-      formData.append('pdfFile', selectedFile)
-
-      // Envoyer le fichier à l'API
-      const response = await fetch('/api/artwork-pdf', {
-        method: 'POST',
-        body: formData
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        await onSave(artwork.id, selectedFile, result.pdfLink)
-        setCurrentPdfUrl(result.pdfLink)
-        alert("PDF assigné avec succès à l'œuvre!")
+      // Convertir le fichier en base64 pour stockage temporaire
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        const base64 = e.target?.result as string
+        
+        // Stocker temporairement le fichier dans l'état (sera sauvé lors de l'export)
+        await onSave(artwork.id, selectedFile, "", artworkTitle, base64)
+        setCurrentPdfUrl(`temporary-${artwork.id}`)
+        alert("PDF et titre assignés avec succès à l'œuvre! (Sera sauvé définitivement lors de l'export)")
         onClose()
-      } else {
-        console.error('Erreur API:', result.error)
-        alert(`Erreur lors de l'upload: ${result.error}`)
       }
+      reader.onerror = () => {
+        alert("Erreur lors de la lecture du fichier PDF")
+        setUploading(false)
+      }
+      reader.readAsDataURL(selectedFile)
     } catch (error) {
-      console.error("Erreur lors de l'upload:", error)
-      alert("Erreur de connexion lors de l'upload du PDF")
-    } finally {
+      console.error("Erreur lors du traitement:", error)
+      alert("Erreur lors du traitement du PDF")
       setUploading(false)
     }
   }
@@ -67,34 +66,15 @@ export function ArtworkPdfDialog({ artwork, onClose, onSave }: ArtworkPdfDialogP
       return
     }
 
-    setUploading(true)
     try {
-      // Envoyer une requête pour supprimer le PDF
-      const formData = new FormData()
-      formData.append('artworkId', artwork.id)
-      // Pas de fichier = suppression
-
-      const response = await fetch('/api/artwork-pdf', {
-        method: 'POST',
-        body: formData
-      })
-
-      const result = await response.json()
-
-      if (response.ok) {
-        await onSave(artwork.id, null as any, "")
-        setCurrentPdfUrl("")
-        setSelectedFile(null)
-        alert("PDF supprimé avec succès")
-      } else {
-        console.error('Erreur API:', result.error)
-        alert(`Erreur lors de la suppression: ${result.error}`)
-      }
+      // Supprimer le PDF temporairement (sera effectif lors de l'export)
+      await onSave(artwork.id, null as any, "", artworkTitle, "")
+      setCurrentPdfUrl("")
+      setSelectedFile(null)
+      alert("PDF supprimé avec succès! (Sera effectif lors de l'export)")
     } catch (error) {
       console.error("Erreur lors de la suppression:", error)
-      alert("Erreur de connexion lors de la suppression du PDF")
-    } finally {
-      setUploading(false)
+      alert("Erreur lors de la suppression du PDF")
     }
   }
 
@@ -119,6 +99,20 @@ export function ArtworkPdfDialog({ artwork, onClose, onSave }: ArtworkPdfDialogP
               Position: ({artwork.xy[0]}, {artwork.xy[1]})
             </p>
           </div>
+        </div>
+
+        <div className="mb-4">
+          <h3 className="mb-2 font-medium">Titre de l'œuvre:</h3>
+          <input
+            type="text"
+            value={artworkTitle}
+            onChange={(e) => setArtworkTitle(e.target.value)}
+            placeholder="Entrez le titre de l'œuvre..."
+            className="w-full rounded border border-border bg-background p-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ce titre sera utilisé lors du traitement RAG
+          </p>
         </div>
 
         {currentPdfUrl && (
