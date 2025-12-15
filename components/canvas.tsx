@@ -62,14 +62,6 @@ import { useKeyboardShortcuts, getInteractionCursor, calculateSmoothZoom } from 
 import { validateRoom, validateArtwork, validateDoor, validateVerticalLink, validateRoomGeometry, validateArtworkPlacement } from "@/lib/validation"
 import { quickCoherenceCheck } from "@/lib/global-coherence"
 import { findSnapPoints, type SnapPoint } from "@/lib/snap"
-import { 
-  canModifyVerticalLink, 
-  modifyVerticalLinkWithSync, 
-  moveVerticalLinkWithSync, 
-  resizeVerticalLinkWithSync,
-  getLinkedVerticalLinks,
-  validateVerticalLinkCreation
-} from "@/lib/vertical-link-sync"
 import { ContextMenu } from "./context-menu"
 
 // Fonction utilitaire pour vérifier si un élément est sélectionné
@@ -114,13 +106,6 @@ interface CanvasProps {
   currentFloor: Floor
   onNavigateToFloor?: (floorId: string) => void
   onRecenter?: () => void
-  onVerticalLinkCreation?: (
-    type: "stairs" | "elevator",
-    segment: readonly [Point, Point],
-    width: number,
-    position: { x: number; y: number }
-  ) => void
-  onNotification?: (message: string, type: "error" | "warning" | "info" | "success") => void
 }
 
 export function Canvas({ 
@@ -129,9 +114,7 @@ export function Canvas({
   updateStateTemporary, 
   saveToHistory, 
   currentFloor, 
-  onNavigateToFloor,
-  onVerticalLinkCreation,
-  onNotification
+  onNavigateToFloor 
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -764,12 +747,10 @@ export function Canvas({
       const end = worldToScreen(link.segment[1].x * GRID_SIZE, link.segment[1].y * GRID_SIZE)
 
       const isDraggingThis = draggedElement?.type === "verticalLink" && draggedElement.id === link.id
-      const isLinkedElement = link.isLinkedElement || false
-      const hasLinkedElements = getLinkedVerticalLinks(state, link.id).length > 1
       
       const isStairs = link.type === "stairs"
       
-      let strokeColor =
+      const strokeColor =
         isDraggingThis && !isValidPlacement
           ? (isStairs ? COLORS.stairsInvalid : COLORS.elevatorInvalid)
           : isSelected
@@ -777,11 +758,6 @@ export function Canvas({
             : isHovered
               ? (isStairs ? COLORS.stairsHovered : COLORS.elevatorHovered)
               : (isStairs ? COLORS.stairsDefault : COLORS.elevatorDefault)
-              
-      // Modifier la couleur si c'est un élément lié
-      if (isLinkedElement) {
-        strokeColor = strokeColor + "CC" // Ajouter transparence pour les éléments liés
-      }
 
       // Ligne principale plus fine
       ctx.beginPath()
@@ -935,29 +911,6 @@ export function Canvas({
         ctx.font = `${iconSize}px system-ui, -apple-system, sans-serif`
         ctx.fillStyle = strokeColor
         ctx.fillText(icon, midX + 8 * state.zoom, midY - 2 * state.zoom)
-      }
-
-      // Indicateurs de synchronisation pour les liens liés
-      if (hasLinkedElements) {
-        // Afficher un petit indicateur de lien
-        const linkIconSize = Math.max(4, 6 * state.zoom)
-        ctx.font = `${linkIconSize}px system-ui, -apple-system, sans-serif`
-        ctx.fillStyle = isLinkedElement ? "#3B82F6" : "#10B981" // Bleu pour lié, vert pour maître
-        ctx.textAlign = "center"
-        
-        // Icône de chaîne pour indiquer la synchronisation
-        const linkSymbol = isLinkedElement ? "🔗" : "⚡"
-        ctx.fillText(linkSymbol, midX + 20 * state.zoom, midY + 10 * state.zoom)
-        
-        // Texte d'information si sélectionné
-        if (isSelected) {
-          const linkedCount = getLinkedVerticalLinks(state, link.id).length
-          const infoText = `${linkedCount} étage${linkedCount > 1 ? 's' : ''} lié${linkedCount > 1 ? 's' : ''}`
-          const infoSize = Math.max(6, 8 * state.zoom)
-          ctx.font = `${infoSize}px system-ui, -apple-system, sans-serif`
-          ctx.fillStyle = "rgba(59, 130, 246, 0.8)"
-          ctx.fillText(infoText, midX, midY + 25 * state.zoom)
-        }
       }
     },
     [worldToScreen, state.zoom, state.selectedTool, draggedElement, hoveredElement, isValidPlacement],
@@ -2100,87 +2053,64 @@ export function Canvas({
               }),
             }
           } else if (draggedElement.type === "verticalLink") {
-            // Pour les liens verticaux, on ne fait qu'un aperçu local
-            // La synchronisation se fera lors de la finalisation
             return {
               ...floor,
               verticalLinks: floor.verticalLinks.map((link) => {
                 if (link.id !== draggedElement.id) return link
 
-                // Vérifier si la modification est possible avec la synchronisation
-                let newSegment: [Point, Point]
-                let width = link.width
-
-                if (draggedElement.endpoint) {
-                  // Déplacement d'extrémité
-                  newSegment = draggedElement.endpoint === "start" 
-                    ? [gridPos, link.segment[1]] 
-                    : [link.segment[0], gridPos]
-                  width = Math.hypot(newSegment[1].x - newSegment[0].x, newSegment[1].y - newSegment[0].y)
-                } else {
-                  // Déplacement complet avec mode glissement intelligent sur mur parent
-                  const parentWall = findParentWall(link.segment, floor.walls)
+                // Mode glissement intelligent sur mur parent
+                const parentWall = findParentWall(link.segment, floor.walls)
+                
+                if (parentWall) {
+                  // Glissement le long du mur parent
+                  const projectedCenter = projectPointOnWallSegment(
+                    gridPos,
+                    parentWall.segment,
+                    link.width,
+                    CONSTRAINTS.verticalLink.minClearance
+                  )
                   
-                  if (parentWall) {
-                    const projectedCenter = projectPointOnWallSegment(
-                      gridPos,
+                  if (projectedCenter) {
+                    // Calculer le nouveau segment centré sur la projection
+                    const newSegment = calculateElementSegmentOnWall(
+                      projectedCenter,
                       parentWall.segment,
-                      link.width,
-                      CONSTRAINTS.verticalLink.minClearance
+                      link.width
                     )
                     
-                    if (projectedCenter) {
-                      const calculatedSegment = calculateElementSegmentOnWall(
-                        projectedCenter,
-                        parentWall.segment,
-                        link.width
+                    if (newSegment) {
+                      // Validation du placement
+                      const occupied = isWallSegmentOccupied(
+                        newSegment[0],
+                        newSegment[1],
+                        floor.doors,
+                        floor.verticalLinks.filter((l) => l.id !== link.id),
+                        floor.artworks,
                       )
+                      setIsValidPlacement(!occupied)
                       
-                      if (calculatedSegment) {
-                        newSegment = calculatedSegment
-                      } else {
-                        // Fallback: déplacement par offset
-                        const offset = {
-                          x: gridPos.x - (link.segment[0].x + link.segment[1].x) / 2,
-                          y: gridPos.y - (link.segment[0].y + link.segment[1].y) / 2
-                        }
-                        newSegment = [
-                          { x: link.segment[0].x + offset.x, y: link.segment[0].y + offset.y },
-                          { x: link.segment[1].x + offset.x, y: link.segment[1].y + offset.y }
-                        ]
-                      }
-                    } else {
-                      return link // Pas de modification si projection impossible
+                      return { ...link, segment: newSegment }
                     }
-                  } else {
-                    // Déplacement libre par offset
-                    const offset = {
-                      x: gridPos.x - (link.segment[0].x + link.segment[1].x) / 2,
-                      y: gridPos.y - (link.segment[0].y + link.segment[1].y) / 2
-                    }
-                    newSegment = [
-                      { x: link.segment[0].x + offset.x, y: link.segment[0].y + offset.y },
-                      { x: link.segment[1].x + offset.x, y: link.segment[1].y + offset.y }
-                    ]
                   }
                 }
 
-                // Vérifier si la modification est possible avec la synchronisation
-                const canModify = canModifyVerticalLink(state, link.id, newSegment, width)
-                setIsValidPlacement(canModify.canModify)
-                
-                if (!canModify.canModify) {
-                  // Notifier l'utilisateur de l'impossibilité
-                  onNotification?.(canModify.reason || "Modification impossible", "warning")
-                  return link // Garder l'ancien segment
-                }
+                // Fallback: déplacement libre d'extrémité
+                const newSegment: [Point, Point] =
+                  draggedElement.endpoint === "start" ? [gridPos, link.segment[1]] : [link.segment[0], gridPos]
+
+                const width = Math.hypot(newSegment[1].x - newSegment[0].x, newSegment[1].y - newSegment[0].y)
 
                 // Vérifier la taille minimum
                 const isMinSizeValid = width >= CONSTRAINTS.verticalLink.minWidth
-                if (!isMinSizeValid) {
-                  setIsValidPlacement(false)
-                  return link
-                }
+
+                const occupied = isWallSegmentOccupied(
+                  newSegment[0],
+                  newSegment[1],
+                  floor.doors,
+                  floor.verticalLinks.filter((l) => l.id !== link.id),
+                  floor.artworks,
+                )
+                setIsValidPlacement(!occupied && isMinSizeValid)
 
                 return { ...link, segment: newSegment, width }
               }),
@@ -3142,13 +3072,13 @@ export function Canvas({
                 }),
               }
             } else if (dragStartState.type === "verticalLink") {
-              // Annuler avec synchronisation
-              const restoredState = modifyVerticalLinkWithSync(
-                state, 
-                originalData.id, 
-                { segment: originalData.segment, width: originalData.width }
-              )
-              return restoredState.floors.find(f => f.id === floor.id) || floor
+              return {
+                ...floor,
+                verticalLinks: floor.verticalLinks.map((link) => {
+                  if (link.id === originalData.id) return originalData
+                  return link
+                }),
+              }
             } else if (dragStartState.type === "wall") {
               return {
                 ...floor,
@@ -3165,48 +3095,11 @@ export function Canvas({
                            "Annuler déplacement mur"
           finalizeAction({ floors: newFloors }, actionName)
         } else if (isValidPlacement) {
-          // Finaliser le déplacement d'élément réussi avec synchronisation pour liens verticaux
-          if (draggedElement.type === "verticalLink") {
-            const currentLink = currentFloor.verticalLinks.find(l => l.id === draggedElement.id)
-            if (currentLink) {
-              try {
-                let synchronizedState: EditorState
-                
-                if (draggedElement.endpoint) {
-                  // Redimensionnement
-                  synchronizedState = resizeVerticalLinkWithSync(
-                    state,
-                    draggedElement.id,
-                    currentLink.width,
-                    draggedElement.endpoint === "start" ? "end" : "start"
-                  )
-                } else {
-                  // Déplacement complet
-                  const originalLink = dragStartState?.originalData as VerticalLink
-                  if (originalLink) {
-                    const offset = {
-                      x: (currentLink.segment[0].x + currentLink.segment[1].x) / 2 - (originalLink.segment[0].x + originalLink.segment[1].x) / 2,
-                      y: (currentLink.segment[0].y + currentLink.segment[1].y) / 2 - (originalLink.segment[0].y + originalLink.segment[1].y) / 2
-                    }
-                    synchronizedState = moveVerticalLinkWithSync(state, draggedElement.id, offset)
-                  } else {
-                    synchronizedState = state
-                  }
-                }
-                
-                finalizeAction({ floors: synchronizedState.floors }, "Déplacer liaison verticale synchronisée")
-              } catch (error) {
-                console.error("Erreur lors de la synchronisation:", error)
-                finalizeAction({ floors: state.floors }, "Déplacer liaison verticale")
-              }
-            } else {
-              finalizeAction({ floors: state.floors }, "Déplacer liaison verticale")
-            }
-          } else {
-            const actionName = draggedElement.type === "door" ? "Déplacer porte" :
-                             "Déplacer extrémité de mur"
-            finalizeAction({ floors: state.floors }, actionName)
-          }
+          // Finaliser le déplacement d'élément réussi
+          const actionName = draggedElement.type === "door" ? "Déplacer porte" :
+                           draggedElement.type === "verticalLink" ? "Déplacer liaison verticale" :
+                           "Déplacer extrémité de mur"
+          finalizeAction({ floors: state.floors }, actionName)
         }
         setDraggedElement(null)
         setDragStartState(null)
@@ -3475,8 +3368,7 @@ export function Canvas({
       } else if (
         (state.selectedTool === "stairs" || state.selectedTool === "elevator") &&
         wallSegmentSnap &&
-        creationPreview &&
-        onVerticalLinkCreation
+        creationPreview
       ) {
         const linkWidth = Math.hypot(
           creationPreview.end.x - creationPreview.start.x,
@@ -3492,27 +3384,32 @@ export function Canvas({
           return
         }
 
-        // Appeler la fonction de sélection de direction au lieu de créer directement
-        const canvas = canvasRef.current
-        const rect = canvas?.getBoundingClientRect()
-        if (rect) {
-          const screenPosition = {
-            x: rect.left + (creationPreview.end.x * GRID_SIZE + state.pan.x) * state.zoom,
-            y: rect.top + (creationPreview.end.y * GRID_SIZE + state.pan.y) * state.zoom
-          }
-          
-          onVerticalLinkCreation(
-            state.selectedTool as "stairs" | "elevator",
-            [creationPreview.start, creationPreview.end],
-            linkWidth,
-            screenPosition
-          )
+        const tempLink: VerticalLink = {
+          id: `${state.selectedTool}-${Date.now()}`,
+          type: state.selectedTool,
+          segment: [creationPreview.start, creationPreview.end],
+          width: linkWidth,
+          direction: "both",
+          to_floor: "",
         }
-        
-        // Nettoyer l'état de création
-        setIsDragging(false)
-        setDrawStartPoint(null)
-        setCreationPreview(null)
+
+        // Validation stricte liaison verticale
+        const validationResult = validateVerticalLink(tempLink)
+
+        if (!validationResult.valid) {
+          console.warn("Liaison verticale invalide:", validationResult.message)
+          setIsDragging(false)
+          setDrawStartPoint(null)
+          setCreationPreview(null)
+          return
+        }
+
+        const newFloors = state.floors.map((floor) =>
+          floor.id === state.currentFloorId ? { ...floor, verticalLinks: [...floor.verticalLinks, tempLink] } : floor,
+        )
+
+        const actionName = state.selectedTool === "stairs" ? "Créer escalier" : "Créer ascenseur"
+        finalizeAction({ floors: newFloors }, actionName)
       } else if (state.selectedTool === "wall" && drawStartPoint && hoveredPoint && isValidPlacement) {
         // Appliquer le snap sur les murs de pièce pour la création finale
         const startSnap = findRoomWallSnapPoint(drawStartPoint, currentFloor)

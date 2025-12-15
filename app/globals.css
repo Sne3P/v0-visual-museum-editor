@@ -1,22 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Animations pour le système de notifications */
-@keyframes slide-in-from-right {
-  0% {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  100% {
-    transform: translateX(0);
-    opacity: 1;
-  }
-}
-
-.animate-slide-in-from-right {
-  animation: slide-in-from-right 0.3s ease-out;
-}
-
 @custom-variant dark (&:is(.dark *));
 
 :root {

@@ -54,10 +54,7 @@ export interface VerticalLink {
   readonly segment: readonly [Point, Point] // start and end points on the wall
   readonly width: number // width in grid units
   readonly to_floor: string
-  readonly direction?: "up" | "down" | "both" // optionnel pour rétro-compatibilité
-  readonly linkedFloors?: string[] // étages connectés (optionnel)
-  readonly isLinkedElement?: boolean // true si cet élément est un lien généré automatiquement
-  readonly masterLinkId?: string // ID du lien principal pour les éléments liés
+  readonly direction?: "up" | "down" | "both"
 }
 
 export interface Escalator {

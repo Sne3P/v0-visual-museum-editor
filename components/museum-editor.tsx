@@ -6,12 +6,8 @@ import { Toolbar } from "./toolbar"
 import { FloorTabs } from "./floor-tabs"
 import { PropertiesPanel } from "./properties-panel"
 import { ExportDialog } from "./export-dialog"
-import { DirectionSelector } from "./direction-selector"
-import { NotificationContainer, type NotificationState } from "./notification"
-import type { EditorState, Tool, Floor, MeasurementDisplay, Point, VerticalLink } from "@/lib/types"
+import type { EditorState, Tool, Floor, MeasurementDisplay } from "@/lib/types"
 import { calculatePolygonAreaInMeters, getPolygonCenter } from "@/lib/geometry"
-import { createVerticalLinkWithCascade, deleteVerticalLinkWithCascade } from "@/lib/multi-floor"
-import { canModifyVerticalLink } from "@/lib/vertical-link-sync"
 import { v4 as uuidv4 } from "uuid"
 
 export function MuseumEditor() {
@@ -50,31 +46,6 @@ export function MuseumEditor() {
   })
 
   const [showExport, setShowExport] = useState(false)
-  const [notifications, setNotifications] = useState<NotificationState[]>([])
-  const [directionSelector, setDirectionSelector] = useState<{
-    isVisible: boolean
-    position: { x: number; y: number }
-    type: "stairs" | "elevator"
-    segment: readonly [Point, Point]
-    width: number
-  }>({
-    isVisible: false,
-    position: { x: 0, y: 0 },
-    type: "stairs",
-    segment: [{ x: 0, y: 0 }, { x: 0, y: 0 }],
-    width: 1
-  })
-
-  // Fonction utilitaire pour ajouter des notifications
-  const addNotification = useCallback((message: string, type: "error" | "warning" | "info" | "success", duration?: number) => {
-    const id = uuidv4()
-    const notification: NotificationState = { id, message, type, duration }
-    setNotifications(prev => [...prev, notification])
-  }, [])
-
-  const removeNotification = useCallback((id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id))
-  }, [])
 
   const currentFloor = state.floors.find((f) => f.id === state.currentFloorId)!
 
@@ -205,124 +176,6 @@ export function MuseumEditor() {
     [updateState],
   )
 
-  // Gestion des liens verticaux avec cascade
-  const handleVerticalLinkCreation = useCallback((
-    type: "stairs" | "elevator",
-    segment: readonly [Point, Point],
-    width: number,
-    position: { x: number; y: number }
-  ) => {
-    setDirectionSelector({
-      isVisible: true,
-      position,
-      type,
-      segment,
-      width
-    })
-  }, [])
-
-  const handleDirectionSelect = useCallback((
-    direction: "up" | "down" | "both",
-    targetFloorIds: string[],
-    autoCreate: boolean = true
-  ) => {
-    try {
-      // Créer les étages manquants si nécessaire
-      let updatedState = state
-      const floorsToCreate: Floor[] = []
-      
-      // Identifier les étages virtuels à créer
-      const virtualFloorIds = targetFloorIds.filter(id => id.startsWith('virtual-'))
-      
-      for (const virtualId of virtualFloorIds) {
-        if (virtualId.startsWith('virtual-up-')) {
-          const newFloorIndex = state.floors.length
-          const newFloor: Floor = {
-            id: uuidv4(),
-            name: `Étage ${newFloorIndex + 1}`,
-            rooms: [],
-            doors: [],
-            walls: [],
-            artworks: [],
-            verticalLinks: [],
-            escalators: [],
-            elevators: [],
-          }
-          floorsToCreate.push(newFloor)
-        } else if (virtualId.startsWith('virtual-down-')) {
-          const newFloor: Floor = {
-            id: uuidv4(),
-            name: `Sous-sol`,
-            rooms: [],
-            doors: [],
-            walls: [],
-            artworks: [],
-            verticalLinks: [],
-            escalators: [],
-            elevators: [],
-          }
-          floorsToCreate.push(newFloor)
-        }
-      }
-      
-      // Ajouter les nouveaux étages à l'état
-      if (floorsToCreate.length > 0) {
-        const updatedFloors = [...state.floors, ...floorsToCreate]
-        updatedState = { ...state, floors: updatedFloors }
-      }
-      
-      // Remplacer les IDs virtuels par les vrais IDs des étages créés
-      const realTargetFloorIds = targetFloorIds.map(id => {
-        if (id.startsWith('virtual-')) {
-          const createdFloor = floorsToCreate.find(f => 
-            (id.startsWith('virtual-up-') && f.name.includes('Étage')) ||
-            (id.startsWith('virtual-down-') && f.name.includes('Sous-sol'))
-          )
-          return createdFloor ? createdFloor.id : id
-        }
-        return id
-      })
-
-      const { updatedState: finalState } = createVerticalLinkWithCascade(
-        updatedState,
-        directionSelector.type,
-        directionSelector.segment,
-        directionSelector.width,
-        direction,
-        realTargetFloorIds
-      )
-
-      updateStateWithMeasurements(finalState)
-      saveToHistory(finalState, `Créer ${directionSelector.type === "stairs" ? "escalier" : "ascenseur"} avec cascade`)
-      
-      const linkTypeName = directionSelector.type === "stairs" ? "Escalier" : "Ascenseur"
-      const createdFloorsMessage = floorsToCreate.length > 0 ? ` (${floorsToCreate.length} nouvel étage créé)` : ""
-      addNotification(`${linkTypeName} créé et synchronisé sur tous les étages connectés${createdFloorsMessage}`, "success")
-      
-      setDirectionSelector(prev => ({ ...prev, isVisible: false }))
-    } catch (error) {
-      console.error("Erreur lors de la création du lien vertical:", error)
-      addNotification("Erreur lors de la création du lien vertical", "error")
-      setDirectionSelector(prev => ({ ...prev, isVisible: false }))
-    }
-  }, [state, directionSelector, updateStateWithMeasurements, saveToHistory])
-
-  const handleDirectionCancel = useCallback(() => {
-    setDirectionSelector(prev => ({ ...prev, isVisible: false }))
-  }, [])
-
-  const deleteVerticalLinkCascade = useCallback((linkId: string) => {
-    try {
-      const updatedState = deleteVerticalLinkWithCascade(state, linkId)
-      updateStateWithMeasurements(updatedState)
-      saveToHistory(updatedState, "Supprimer lien vertical avec cascade")
-      addNotification("Lien vertical supprimé sur tous les étages connectés", "success")
-    } catch (error) {
-      console.error("Erreur lors de la suppression du lien vertical:", error)
-      addNotification("Erreur lors de la suppression du lien vertical", "error")
-    }
-  }, [state, updateStateWithMeasurements, saveToHistory])
-
   const recenterView = useCallback(() => {
     if (currentFloor.rooms.length === 0) {
       updateState({ pan: { x: 400, y: 300 }, zoom: 1 })
@@ -396,16 +249,7 @@ export function MuseumEditor() {
             } else if (state.selectedElementType === "door") {
               updatedFloor.doors = floor.doors.filter((d) => d.id !== state.selectedElementId)
             } else if (state.selectedElementType === "verticalLink") {
-              // Utiliser la suppression en cascade pour les liens verticaux
-              try {
-                const stateAfterDeletion = deleteVerticalLinkWithCascade(state, state.selectedElementId)
-                // La notification sera ajoutée plus bas
-                return stateAfterDeletion.floors.find(f => f.id === floor.id) || floor
-              } catch (error) {
-                console.error("Erreur suppression lien:", error)
-                addNotification("Impossible de supprimer le lien vertical", "error")
-                return floor
-              }
+              updatedFloor.verticalLinks = floor.verticalLinks.filter((v) => v.id !== state.selectedElementId)
             } else if (state.selectedElementType === "wall") {
               updatedFloor.walls = floor.walls.filter((w) => w.id !== state.selectedElementId)
             }
@@ -423,14 +267,7 @@ export function MuseumEditor() {
               } else if (element.type === "door") {
                 updatedFloor.doors = updatedFloor.doors.filter((d) => d.id !== element.id)
               } else if (element.type === "verticalLink") {
-                // Utiliser la suppression en cascade pour les liens verticaux
-                try {
-                  const stateAfterDeletion = deleteVerticalLinkWithCascade(state, element.id)
-                  updatedFloor = stateAfterDeletion.floors.find(f => f.id === floor.id) || updatedFloor
-                } catch (error) {
-                  console.error("Erreur suppression lien:", error)
-                  addNotification("Impossible de supprimer le lien vertical", "error")
-                }
+                updatedFloor.verticalLinks = updatedFloor.verticalLinks.filter((v) => v.id !== element.id)
               } else if (element.type === "wall") {
                 updatedFloor.walls = updatedFloor.walls.filter((w) => w.id !== element.id)
               }
@@ -592,8 +429,6 @@ export function MuseumEditor() {
             currentFloor={currentFloor}
             onNavigateToFloor={switchFloor}
             onRecenter={recenterView}
-            onVerticalLinkCreation={handleVerticalLinkCreation}
-            onNotification={addNotification}
           />
         </div>
 
@@ -607,21 +442,6 @@ export function MuseumEditor() {
       {/* Context menu is rendered inside the Canvas (so it has x/y coordinates). */}
 
       {showExport && <ExportDialog state={state} onClose={() => setShowExport(false)} />}
-      
-      <DirectionSelector
-        isVisible={directionSelector.isVisible}
-        position={directionSelector.position}
-        floors={state.floors}
-        currentFloorId={state.currentFloorId}
-        onSelect={handleDirectionSelect}
-        onCancel={handleDirectionCancel}
-        type={directionSelector.type}
-      />
-      
-      <NotificationContainer
-        notifications={notifications}
-        onRemove={removeNotification}
-      />
     </div>
   )
 }
