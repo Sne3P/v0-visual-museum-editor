@@ -6,6 +6,9 @@
 import type { Point, Bounds } from '@/core/entities'
 import { GRID_SIZE, SNAP_THRESHOLD, GRID_TO_METERS, MEASUREMENT_PRECISION, GEOMETRY } from '@/core/constants'
 
+// Ancien alias pour compatibilité (utilise polygonsOverlap maintenant)
+export { polygonsOverlap as polygonsIntersect }
+
 /**
  * Snap un point à la grille
  */
@@ -88,6 +91,115 @@ export function distance(p1: Point, p2: Point): number {
 export function distanceToSegment(point: Point, segStart: Point, segEnd: Point): number {
   const projected = projectPointOntoSegment(point, segStart, segEnd)
   return distance(point, projected)
+}
+
+/**
+ * Vérifie si deux polygones se chevauchent (surfaces internes)
+ * Retourne true SEULEMENT si les surfaces internes se chevauchent
+ * Retourne false si les polygones se touchent uniquement (arêtes communes ou points communs)
+ */
+export function polygonsOverlap(poly1: ReadonlyArray<Point>, poly2: ReadonlyArray<Point>): boolean {
+  // 1. Vérifier si des sommets de poly1 sont strictement à l'intérieur de poly2
+  for (const vertex of poly1) {
+    if (isPointStrictlyInsidePolygon(vertex, poly2)) {
+      return true
+    }
+  }
+  
+  // 2. Vérifier si des sommets de poly2 sont strictement à l'intérieur de poly1
+  for (const vertex of poly2) {
+    if (isPointStrictlyInsidePolygon(vertex, poly1)) {
+      return true
+    }
+  }
+  
+  // 3. Vérifier les intersections d'arêtes (non aux extrémités)
+  for (let i = 0; i < poly1.length; i++) {
+    const a1 = poly1[i]
+    const a2 = poly1[(i + 1) % poly1.length]
+    
+    for (let j = 0; j < poly2.length; j++) {
+      const b1 = poly2[j]
+      const b2 = poly2[(j + 1) % poly2.length]
+      
+      // Vérifier intersection au milieu des segments (pas aux extrémités)
+      if (segmentsCrossInMiddle(a1, a2, b1, b2)) {
+        return true
+      }
+    }
+  }
+  
+  return false
+}
+
+/**
+ * Vérifie si un point est STRICTEMENT à l'intérieur d'un polygone
+ * (pas sur les bords)
+ */
+function isPointStrictlyInsidePolygon(point: Point, polygon: ReadonlyArray<Point>): boolean {
+  if (!isPointInPolygon(point, polygon)) return false
+  
+  // Vérifier que le point n'est pas sur un bord
+  for (let i = 0; i < polygon.length; i++) {
+    const p1 = polygon[i]
+    const p2 = polygon[(i + 1) % polygon.length]
+    
+    if (isPointOnSegment(point, p1, p2)) {
+      return false
+    }
+  }
+  
+  return true
+}
+
+/**
+ * Vérifie si un point est sur un segment
+ */
+function isPointOnSegment(point: Point, segStart: Point, segEnd: Point, tolerance: number = 0.01): boolean {
+  const dist = distanceToSegment(point, segStart, segEnd)
+  return dist < tolerance
+}
+
+/**
+ * Vérifie si deux segments se croisent au milieu (pas aux extrémités)
+ */
+function segmentsCrossInMiddle(a1: Point, a2: Point, b1: Point, b2: Point, tolerance: number = 0.01): boolean {
+  const intersection = getSegmentIntersection(a1, a2, b1, b2)
+  if (!intersection) return false
+  
+  // Vérifier que l'intersection n'est pas aux extrémités
+  const isEndpoint = 
+    distance(intersection, a1) < tolerance ||
+    distance(intersection, a2) < tolerance ||
+    distance(intersection, b1) < tolerance ||
+    distance(intersection, b2) < tolerance
+  
+  return !isEndpoint
+}
+
+/**
+ * Calcule le point d'intersection entre deux segments (si existe)
+ */
+function getSegmentIntersection(a1: Point, a2: Point, b1: Point, b2: Point): Point | null {
+  const dax = a2.x - a1.x
+  const day = a2.y - a1.y
+  const dbx = b2.x - b1.x
+  const dby = b2.y - b1.y
+  
+  const denominator = dax * dby - day * dbx
+  if (Math.abs(denominator) < 1e-10) return null // Parallèles
+  
+  const t = ((b1.x - a1.x) * dby - (b1.y - a1.y) * dbx) / denominator
+  const u = ((b1.x - a1.x) * day - (b1.y - a1.y) * dax) / denominator
+  
+  if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+    return {
+      x: a1.x + t * dax,
+      y: a1.y + t * day
+    }
+  }
+  
+  return null
 }
 
 /**
@@ -223,33 +335,35 @@ export function calculateDistanceInMeters(p1: Point, p2: Point): number {
 }
 
 /**
- * Crée un polygone circulaire
+ * Crée un polygone circulaire avec points snappés au grid
  */
-export function createCirclePolygon(center: Point, radius: number): Point[] {
+export function createCirclePolygon(center: Point, radius: number, gridSize: number = GRID_SIZE): Point[] {
   const points: Point[] = []
   const segments = GEOMETRY.circleSegments
   
   for (let i = 0; i < segments; i++) {
     const angle = (i / segments) * Math.PI * 2
-    points.push({
+    const point = {
       x: center.x + Math.cos(angle) * radius,
       y: center.y + Math.sin(angle) * radius,
-    })
+    }
+    // Snapper chaque point au grid
+    points.push(snapToGrid(point, gridSize))
   }
   
   return points
 }
 
 /**
- * Crée un polygone triangulaire
+ * Crée un polygone triangulaire avec points snappés au grid
  */
-export function createTrianglePolygon(p1: Point, p2: Point): Point[] {
+export function createTrianglePolygon(p1: Point, p2: Point, gridSize: number = GRID_SIZE): Point[] {
   const dx = p2.x - p1.x
   const dy = p2.y - p1.y
   const height = Math.sqrt(dx * dx + dy * dy)
   const angle = Math.atan2(dy, dx)
   
-  return [
+  const points = [
     p1,
     p2,
     {
@@ -257,17 +371,20 @@ export function createTrianglePolygon(p1: Point, p2: Point): Point[] {
       y: p1.y + Math.sin(angle + Math.PI / 3) * height,
     },
   ]
+  
+  // Snapper tous les points au grid
+  return points.map(p => snapToGrid(p, gridSize))
 }
 
 /**
- * Crée un polygone d'arc
+ * Crée un polygone d'arc avec points snappés au grid
  */
-export function createArcPolygon(center: Point, start: Point, end: Point): Point[] {
+export function createArcPolygon(center: Point, start: Point, end: Point, gridSize: number = GRID_SIZE): Point[] {
   const startAngle = Math.atan2(start.y - center.y, start.x - center.x)
   const endAngle = Math.atan2(end.y - center.y, end.x - center.x)
   const radius = distance(center, start)
   
-  const points: Point[] = [center]
+  const points: Point[] = [snapToGrid(center, gridSize)]
   const segments = GEOMETRY.arcSegments
   let angle = startAngle
   let angleDiff = endAngle - startAngle
@@ -276,10 +393,12 @@ export function createArcPolygon(center: Point, start: Point, end: Point): Point
   
   for (let i = 0; i <= segments; i++) {
     const currentAngle = startAngle + (i / segments) * angleDiff
-    points.push({
+    const point = {
       x: center.x + Math.cos(currentAngle) * radius,
       y: center.y + Math.sin(currentAngle) * radius,
-    })
+    }
+    // Snapper chaque point au grid
+    points.push(snapToGrid(point, gridSize))
   }
   
   return points

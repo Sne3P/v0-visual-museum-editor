@@ -48,7 +48,7 @@ export const CONSTRAINTS = {
   },
   
   creation: {
-    minDragDistance: 0.2,
+    minDragDistance: 0.1,  // R\u00e9duit pour preview plus rapide (0.1 = 5cm)
     snapTolerance: 0.4,
     gridSnapForce: false,
     intelligentSnap: true,

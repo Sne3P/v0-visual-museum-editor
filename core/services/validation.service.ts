@@ -18,7 +18,7 @@ import { CONSTRAINTS, ERROR_MESSAGES, VISUAL_FEEDBACK } from '@/core/constants'
 import { 
   calculateBounds, 
   calculatePolygonAreaInMeters,
-  polygonsIntersect,
+  polygonsOverlap,
   isPointInPolygon,
   segmentsIntersect,
   distanceToSegment
@@ -95,12 +95,15 @@ export function validateRoomGeometry(room: Room, context?: ValidationContext): E
     }
   }
 
-  // 4. Vérifier le chevauchement avec d'autres pièces
+  // 4. Vérifier le CHEVAUCHEMENT (surfaces internes) avec d'autres pièces
+  // Les pièces peuvent SE TOUCHER (arêtes communes, points communs) mais pas SE CHEVAUCHER
   if (context?.floor) {
     const overlappingRooms = context.floor.rooms.filter(otherRoom => {
       if (otherRoom.id === room.id) return false
       if (context.excludeIds?.includes(otherRoom.id)) return false
-      return polygonsIntersect(room.polygon, otherRoom.polygon)
+      // Utiliser polygonsOverlap au lieu de polygonsIntersect
+      // pour permettre le contact mais interdire le chevauchement
+      return polygonsOverlap(room.polygon, otherRoom.polygon)
     })
 
     if (overlappingRooms.length > 0) {
@@ -110,7 +113,7 @@ export function validateRoomGeometry(room: Room, context?: ValidationContext): E
         code: 'ROOM_OVERLAPPING',
         message: ERROR_MESSAGES.room.overlapping,
         affectedElements: overlappingRooms.map(r => r.id),
-        suggestions: ['Déplacez la pièce', 'Réduisez sa taille'],
+        suggestions: ['Déplacez la pièce', 'Réduisez sa taille', 'Les pièces peuvent se toucher mais pas se chevaucher'],
         visualFeedback: {
           color: VISUAL_FEEDBACK.colors.invalid,
           opacity: 0.5,

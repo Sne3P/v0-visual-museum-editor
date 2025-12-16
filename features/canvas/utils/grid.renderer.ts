@@ -80,23 +80,31 @@ export function drawGrid(
     ctx.stroke()
   }
   
-  // Labels de coordonnees (pour CAO precis)
+  // Labels de coordonnees avec vraies mesures (1 carré = 0.5m)
   ctx.fillStyle = 'rgba(100, 100, 100, 0.8)'
   ctx.font = '11px monospace'
   
-  // Labels X tous les 10m
-  for (let x = majorOffsetX; x < width; x += majorGridSize * 2) {
-    const worldX = Math.round((x - pan.x) / zoom)
-    if (worldX % 10 === 0) {
-      ctx.fillText(worldX + 'm', x + 4, 15)
+  // GRID_SIZE (40px) = 0.5m, donc 1px = 0.0125m
+  const GRID_TO_METERS = 0.5
+  
+  // Interval dynamique pour labels selon le zoom
+  const labelInterval = zoom > 0.5 ? majorGridSize : majorGridSize * 2
+  
+  // Labels X avec vraies mesures
+  for (let x = majorOffsetX; x < width; x += labelInterval) {
+    const gridUnits = Math.round((x - pan.x) / (GRID_SIZE * zoom))
+    const meters = (gridUnits * GRID_TO_METERS).toFixed(1)
+    if (x > 20 && x < width - 50) {
+      ctx.fillText(meters + 'm', x + 4, 15)
     }
   }
   
-  // Labels Y tous les 10m
-  for (let y = majorOffsetY; y < height; y += majorGridSize * 2) {
-    const worldY = Math.round((y - pan.y) / zoom)
-    if (worldY % 10 === 0) {
-      ctx.fillText(worldY + 'm', 5, y - 4)
+  // Labels Y avec vraies mesures
+  for (let y = majorOffsetY; y < height; y += labelInterval) {
+    const gridUnits = Math.round((y - pan.y) / (GRID_SIZE * zoom))
+    const meters = (gridUnits * GRID_TO_METERS).toFixed(1)
+    if (y > 20 && y < height - 20) {
+      ctx.fillText(meters + 'm', 5, y - 4)
     }
   }
 }

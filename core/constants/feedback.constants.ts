@@ -10,6 +10,7 @@ export const VISUAL_FEEDBACK = {
     creating: "#3b82f6",
     moving: "#8b5cf6",
     resizing: "#06b6d4",
+    neutral: "#6b7280",
   },
   
   opacity: {
