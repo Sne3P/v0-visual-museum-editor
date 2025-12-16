@@ -1,11 +1,8 @@
 /**
  * POINT D'ENTRÉE HOOKS CANVAS
+ * Hooks réutilisables pour le Canvas
  */
 
-export * from './useCanvasInteraction'
-export * from './useZoomPan'
-export * from './useCanvasMouseEvents'
-export * from './useCanvasDrawing'
-export * from './useCanvasSelection'
-export * from './useCanvasDrag'
-export * from './useShapeCreation'
+export * from './useZoomPan'              // Zoom & Pan (à utiliser dans Canvas)
+export * from './useCanvasSelection'      // Sélection éléments (future)
+export * from './useShapeCreation'        // Création formes (actif)

@@ -249,34 +249,6 @@ function direction(p1: Point, p2: Point, p3: Point): number {
 }
 
 /**
- * Vérifie si deux polygones se chevauchent
- */
-export function polygonsIntersect(poly1: ReadonlyArray<Point>, poly2: ReadonlyArray<Point>): boolean {
-  // Test 1: Un sommet de poly1 dans poly2
-  for (const point of poly1) {
-    if (isPointInPolygon(point, poly2)) return true
-  }
-  
-  // Test 2: Un sommet de poly2 dans poly1
-  for (const point of poly2) {
-    if (isPointInPolygon(point, poly1)) return true
-  }
-  
-  // Test 3: Arêtes qui se croisent
-  for (let i = 0; i < poly1.length; i++) {
-    const seg1: [Point, Point] = [poly1[i], poly1[(i + 1) % poly1.length]]
-    
-    for (let j = 0; j < poly2.length; j++) {
-      const seg2: [Point, Point] = [poly2[j], poly2[(j + 1) % poly2.length]]
-      
-      if (segmentsIntersect(seg1, seg2)) return true
-    }
-  }
-  
-  return false
-}
-
-/**
  * Calcule l'aire d'un polygone en mètres carrés
  */
 export function calculatePolygonAreaInMeters(polygon: ReadonlyArray<Point>): number {
