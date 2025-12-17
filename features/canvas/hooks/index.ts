@@ -11,3 +11,5 @@ export * from './useFreeFormCreation'     // Création forme libre (point par po
 export * from './useCanvasInteraction'    // Interactions utilisateur (clicks, pan)
 export * from './useCanvasCoordinates'    // Coordonnées et zoom
 export * from './useCanvasRender'         // Logique de rendu
+export * from './useElementDrag'          // Déplacement éléments (Phase 2)
+export * from './useVertexEdit'           // Édition vertices (Phase 2)

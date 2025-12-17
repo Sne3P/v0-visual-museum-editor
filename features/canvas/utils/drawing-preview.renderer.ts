@@ -170,7 +170,7 @@ export function drawDrawingPreview(
       )
 
       ctx.beginPath()
-      ctx.arc(screenPoint.x, screenPoint.y, 5 * zoom, 0, Math.PI * 2)
+      ctx.arc(screenPoint.x, screenPoint.y, 5, 0, Math.PI * 2)
       
       // Premier point en vert, autres en bleu
       if (index === 0) {
@@ -181,12 +181,12 @@ export function drawDrawingPreview(
       ctx.fill()
       
       ctx.strokeStyle = 'white'
-      ctx.lineWidth = 2 * zoom
+      ctx.lineWidth = 2
       ctx.stroke()
 
       // Numéro du point
       ctx.fillStyle = 'white'
-      ctx.font = `bold ${11 * zoom}px monospace`
+      ctx.font = 'bold 11px monospace'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
       ctx.fillText(String(index + 1), screenPoint.x, screenPoint.y)
@@ -216,7 +216,7 @@ export function drawDrawingPreview(
       ? VISUAL_FEEDBACK.colors.valid 
       : VISUAL_FEEDBACK.colors.invalid
     ctx.lineWidth = VISUAL_FEEDBACK.stroke.previewThickness
-    ctx.setLineDash([10 * zoom, 5 * zoom])
+    ctx.setLineDash([10, 5])  // Dash pattern constant à l'écran
 
     if (tool === 'rectangle') {
       const width = endScreen.x - startScreen.x

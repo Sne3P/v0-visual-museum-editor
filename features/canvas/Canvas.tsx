@@ -8,6 +8,8 @@
  * - useBoxSelection : Sélection par zone
  * - useShapeCreation : Création formes géométriques (drag)
  * - useFreeFormCreation : Création forme libre (point par point)
+ * - useElementDrag : Déplacement éléments sélectionnés (Phase 2)
+ * - useVertexEdit : Édition vertices de rooms (Phase 2)
  * - useCanvasInteraction : Gestion événements souris
  * - useCanvasRender : Logique de rendu
  */
@@ -22,6 +24,8 @@ import {
   useBoxSelection,
   useShapeCreation,
   useFreeFormCreation,
+  useElementDrag,
+  useVertexEdit,
   useCanvasInteraction,
   useCanvasRender
 } from "@/features/canvas/hooks"
@@ -109,6 +113,22 @@ export function Canvas({
     }
   })
 
+  // Hook de déplacement d'éléments (Phase 2)
+  const elementDrag = useElementDrag({
+    state,
+    currentFloor,
+    updateState,
+    screenToWorld: coordinates.screenToWorld
+  })
+
+  // Hook d'édition de vertices (Phase 2)
+  const vertexEdit = useVertexEdit({
+    state,
+    currentFloor,
+    updateState,
+    screenToWorld: coordinates.screenToWorld
+  })
+
   // Hook d'interaction utilisateur
   const interaction = useCanvasInteraction({
     state,
@@ -118,6 +138,8 @@ export function Canvas({
     boxSelection,
     shapeCreation,
     freeFormCreation,
+    elementDrag,
+    vertexEdit,
     screenToWorld: coordinates.screenToWorld
   })
 
@@ -130,6 +152,8 @@ export function Canvas({
     shapeCreation,
     freeFormCreation,
     boxSelection,
+    elementDrag,
+    vertexEdit,
     hoveredPoint: interaction.hoveredPoint,
     hoverInfo: interaction.hoverInfo
   })
@@ -171,15 +195,42 @@ export function Canvas({
         onMouseMove={interaction.handleMouseMove}
         onMouseUp={interaction.handleMouseUp}
         onMouseLeave={interaction.handleMouseLeave}
-        className="w-full h-full cursor-crosshair"
+        className="w-full h-full"
         style={{
-          cursor: interaction.isPanning ? 'grabbing' : state.selectedTool === 'select' ? 'default' : 'crosshair'
+          cursor: interaction.cursorType === 'grabbing' ? 'grabbing' : 
+                  interaction.cursorType === 'grab' ? 'grab' :
+                  interaction.cursorType === 'crosshair' ? 'crosshair' : 'default'
         }}
       />
 
       {/* Indicateur de l'outil en cours */}
       <div className="absolute bottom-4 left-4 px-3 py-2 bg-gray-900/90 text-white text-sm rounded-lg shadow-lg">
-        {state.selectedTool === 'select' ? (
+        {/* Mode Drag actif */}
+        {elementDrag.dragState.isDragging ? (
+          <div className="flex flex-col gap-1">
+            <div className="font-semibold">🚀 Déplacement en cours</div>
+            <div className="text-xs text-blue-300">
+              {elementDrag.dragState.draggedElements.length} élément{elementDrag.dragState.draggedElements.length > 1 ? 's' : ''} en mouvement
+            </div>
+            <div className="text-xs text-gray-400 mt-1">
+              Relâcher: appliquer • Échap: annuler
+            </div>
+          </div>
+        ) : vertexEdit.editState.isEditing ? (
+          <div className="flex flex-col gap-1">
+            <div className="font-semibold">
+              {vertexEdit.editState.editMode === 'vertex' ? '✏️ Édition vertex' : '✏️ Édition segment'}
+            </div>
+            {vertexEdit.editState.snapInfo.snapType && (
+              <div className="text-xs text-green-300">
+                Snap: {vertexEdit.editState.snapInfo.snapType}
+              </div>
+            )}
+            <div className="text-xs text-gray-400 mt-1">
+              Shift: désactiver smart snap • Relâcher: appliquer • Échap: annuler
+            </div>
+          </div>
+        ) : state.selectedTool === 'select' ? (
           <div className="flex flex-col gap-1">
             <div className="font-semibold">Mode : Sélection</div>
             {state.selectedElements.length > 0 && (
@@ -188,7 +239,7 @@ export function Canvas({
               </div>
             )}
             <div className="text-xs text-gray-400 mt-1">
-              Clic: sélectionner • Ctrl+Clic: multi-sélection • Drag: box selection
+              Clic: sélectionner • Ctrl+Clic: multi-sélection • Drag sélection: déplacer • Drag vide: box
             </div>
           </div>
         ) : state.selectedTool === 'room' ? (

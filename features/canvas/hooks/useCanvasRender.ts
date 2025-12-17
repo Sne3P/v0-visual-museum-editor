@@ -29,6 +29,8 @@ interface CanvasRenderOptions {
   shapeCreation: any
   freeFormCreation: any
   boxSelection: any
+  elementDrag: any
+  vertexEdit: any
   hoveredPoint: Point | null
   hoverInfo: HoverInfo | null
 }
@@ -41,6 +43,8 @@ export function useCanvasRender({
   shapeCreation,
   freeFormCreation,
   boxSelection,
+  elementDrag,
+  vertexEdit,
   hoveredPoint,
   hoverInfo
 }: CanvasRenderOptions) {
@@ -65,18 +69,21 @@ export function useCanvasRender({
     // 2. Éléments du floor
     renderFloorElements(ctx, currentFloor, state, selection)
 
-    // 3. Prévisualisations de création
+    // 3. Feedback visuel drag/edit (NOUVEAU)
+    renderDragFeedback(ctx, canvas, elementDrag, vertexEdit, state)
+
+    // 4. Prévisualisations de création
     renderCreationPreviews(ctx, canvas, state, shapeCreation, freeFormCreation)
 
-    // 4. Box selection
+    // 5. Box selection
     renderBoxSelection(ctx, boxSelection, state)
 
-    // 5. Point hover (snap indicator)
+    // 6. Point hover (snap indicator)
     if (hoveredPoint && !shapeCreation.state.isCreating && !freeFormCreation.state.isCreating && !boxSelection.state.isActive && state.selectedTool !== 'select') {
       drawSnapPoint(ctx, hoveredPoint, state.zoom, state.pan, true)
     }
 
-    // 6. Vertices et segments (mode select uniquement)
+    // 7. Vertices et segments (mode select uniquement)
     if (state.selectedTool === 'select') {
       renderVerticesAndSegments(ctx, currentFloor, state, hoverInfo)
     }
@@ -93,6 +100,8 @@ export function useCanvasRender({
     shapeCreation.state,
     freeFormCreation.state,
     boxSelection.state,
+    elementDrag.dragState,
+    vertexEdit.editState,
     hoveredPoint,
     hoverInfo
   ])
@@ -263,3 +272,90 @@ function renderVerticesAndSegments(
     drawRoomVertices(ctx, room, state.pan, state.zoom, hoverInfo, state.selectedElements)
   })
 }
+
+/**
+ * Rendu du feedback visuel pendant drag/edit (NOUVEAU)
+ */
+function renderDragFeedback(
+  ctx: CanvasRenderingContext2D,
+  canvas: HTMLCanvasElement,
+  elementDrag: any,
+  vertexEdit: any,
+  state: EditorState
+) {
+  // Feedback drag éléments
+  if (elementDrag.dragState.isDragging && !elementDrag.dragState.isValid) {
+    // Overlay rouge semi-transparent sur éléments invalides
+    ctx.save()
+    ctx.fillStyle = 'rgba(220, 38, 38, 0.15)'
+    ctx.strokeStyle = 'rgba(220, 38, 38, 0.8)'
+    ctx.lineWidth = 2  // Épaisseur constante (en pixels écran)
+    
+    // Dessiner contour rouge autour des éléments en drag
+    elementDrag.dragState.draggedElements.forEach((selected: any) => {
+      const floor = state.floors.find(f => f.id === state.currentFloorId)
+      if (!floor) return
+      
+      if (selected.type === 'room') {
+        const room = floor.rooms.find(r => r.id === selected.id)
+        if (room) {
+          ctx.beginPath()
+          room.polygon.forEach((point, i) => {
+            const screenX = point.x * state.zoom + state.pan.x
+            const screenY = point.y * state.zoom + state.pan.y
+            if (i === 0) ctx.moveTo(screenX, screenY)
+            else ctx.lineTo(screenX, screenY)
+          })
+          ctx.closePath()
+          ctx.fill()
+          ctx.stroke()
+        }
+      }
+    })
+    ctx.restore()
+    
+    // Message d'erreur
+    if (elementDrag.dragState.validationMessage) {
+      drawValidationMessage(
+        ctx,
+        elementDrag.dragState.validationMessage,
+        'error',
+        { x: canvas.width / 2, y: 50 }
+      )
+    }
+  }
+  
+  // Feedback édition vertex
+  if (vertexEdit.editState.isEditing) {
+    // Overlay rouge si invalide
+    if (!vertexEdit.editState.isValid && vertexEdit.editState.newPolygon) {
+      ctx.save()
+      ctx.fillStyle = 'rgba(220, 38, 38, 0.15)'
+      ctx.strokeStyle = 'rgba(220, 38, 38, 0.8)'
+      ctx.lineWidth = 2  // Épaisseur constante (en pixels écran)
+      
+      ctx.beginPath()
+      vertexEdit.editState.newPolygon.forEach((point: Point, i: number) => {
+        const screenX = point.x * state.zoom + state.pan.x
+        const screenY = point.y * state.zoom + state.pan.y
+        if (i === 0) ctx.moveTo(screenX, screenY)
+        else ctx.lineTo(screenX, screenY)
+      })
+      ctx.closePath()
+      ctx.fill()
+      ctx.stroke()
+      ctx.restore()
+      
+      // Message d'erreur
+      if (vertexEdit.editState.validationMessage) {
+        drawValidationMessage(
+          ctx,
+          vertexEdit.editState.validationMessage,
+          'error',
+          { x: canvas.width / 2, y: 50 }
+        )
+      }
+    }
+  }
+}
+

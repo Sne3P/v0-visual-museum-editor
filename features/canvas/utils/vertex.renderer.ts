@@ -98,6 +98,33 @@ export function drawSegment(
   ctx.lineTo(endScreen.x, endScreen.y)
   ctx.stroke()
 
+  // Dessiner le point central SEULEMENT si selected (pendant le drag)
+  if (options.isSelected) {
+    const centerScreen = {
+      x: (startScreen.x + endScreen.x) / 2,
+      y: (startScreen.y + endScreen.y) / 2
+    }
+
+    // Indicateur au centre avec icône de déplacement (vert pendant le drag)
+    ctx.beginPath()
+    ctx.arc(centerScreen.x, centerScreen.y, 6, 0, Math.PI * 2)
+    ctx.fillStyle = '#22c55e'  // Vert = en drag
+    ctx.fill()
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 2
+    ctx.stroke()
+
+    // Croix centrale (icône déplacement)
+    ctx.strokeStyle = '#ffffff'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(centerScreen.x - 3, centerScreen.y)
+    ctx.lineTo(centerScreen.x + 3, centerScreen.y)
+    ctx.moveTo(centerScreen.x, centerScreen.y - 3)
+    ctx.lineTo(centerScreen.x, centerScreen.y + 3)
+    ctx.stroke()
+  }
+
   ctx.restore()
 }
 
