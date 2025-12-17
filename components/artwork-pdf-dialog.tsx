@@ -16,12 +16,31 @@ export function ArtworkPdfDialog({ artwork, onClose, onSave }: ArtworkPdfDialogP
   const [artworkTitle, setArtworkTitle] = useState<string>(artwork.name || "")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file && file.type === "application/pdf") {
-      setSelectedFile(file)
-    } else {
+    if (!file) return
+    
+    // Vérifier le type MIME
+    if (file.type !== "application/pdf") {
       alert("Veuillez sélectionner un fichier PDF valide")
+      return
+    }
+    
+    // Vérifier l'en-tête du fichier
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const bytes = new Uint8Array(arrayBuffer)
+      const header = new TextDecoder().decode(bytes.slice(0, 4))
+      
+      if (!header.startsWith('%PDF')) {
+        alert("Le fichier sélectionné n'est pas un PDF valide (en-tête manquant)")
+        return
+      }
+      
+      setSelectedFile(file)
+    } catch (error) {
+      console.error('Erreur validation PDF:', error)
+      alert("Erreur lors de la validation du fichier PDF")
     }
   }
 
@@ -41,7 +60,9 @@ export function ArtworkPdfDialog({ artwork, onClose, onSave }: ArtworkPdfDialogP
       // Convertir le fichier en base64 pour stockage temporaire
       const reader = new FileReader()
       reader.onload = async (e) => {
-        const base64 = e.target?.result as string
+        const dataUrl = e.target?.result as string
+        // Extraire seulement la partie base64 (après "data:application/pdf;base64,")
+        const base64 = dataUrl.split(',')[1]
         
         // Stocker temporairement le fichier dans l'état (sera sauvé lors de l'export)
         await onSave(artwork.id, selectedFile, "", artworkTitle, base64)

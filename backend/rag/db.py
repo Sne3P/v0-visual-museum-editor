@@ -3,319 +3,283 @@ from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 
-def get_default_db_path() -> Path:
-    """Retourne le chemin par défaut de la base de données (fichier processing.db à côté du module)."""
-    return Path(__file__).parent / "processing.db"
+def get_structured_db_path() -> Path:
+    """Retourne le chemin vers la base de données museum_v1.db existante."""
+    return Path(__file__).parent.parent.parent / "database" / "museum_v1.db"
 
 
-def init_db(db_path: Optional[str] = None) -> None:
-    """Initialise la base SQLite et crée les tables si nécessaire."""
-    db_file = db_path or str(get_default_db_path())
-    conn = sqlite3.connect(db_file)
-    cur = conn.cursor()
-
-    # Table Oeuvres selon le schéma cible
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS oeuvres (
-            oeuvre_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT,
-            artist TEXT,
-            description TEXT,
-            image_link TEXT,
-            pdf_link TEXT,
-            room INTEGER,
-            file_name TEXT,
-            file_path TEXT,
-            word_count INTEGER,
-            age_min INTEGER,
-            age_max INTEGER,
-            duration_minutes INTEGER,
-            artwork_type TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    
-    # Table Plan pour les salles
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS plans (
-            plan_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nom TEXT,
-            description TEXT,
-            date_creation DATE
-        )
-        """
-    )
-    
-    # Table Points pour les coordonnées
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS points (
-            point_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            entity_id INTEGER,
-            x REAL,
-            y REAL,
-            ordre INTEGER
-        )
-        """
-    )
-    
-    # Table Chunk pour le RAG
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS chunk (
-            chunk_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            oeuvre_id INTEGER,
-            chunk_text TEXT NOT NULL,
-            chunk_index INTEGER,
-            content_hash TEXT,
-            token_count INTEGER,
-            start_char INTEGER,
-            end_char INTEGER,
-            metadata TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(oeuvre_id) REFERENCES Oeuvres(oeuvre_id) ON DELETE CASCADE
-        )
-        """
-    )
-    
-    # Table pour les parcours (nécessaire pour le système actuel)
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS Parcours (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            criteria TEXT,
-            museum_mapping TEXT,
-            selected_works TEXT,
-            route_plan TEXT,
-            guide_text TEXT,
-            total_duration_minutes INTEGER,
-            model_name TEXT,
-            processing_time_ms INTEGER,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    
-    # Table pour les embeddings (nécessaire pour le RAG)
-    cur.execute(
-        """
-        CREATE TABLE IF NOT EXISTS Embeddings (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chunk_id INTEGER UNIQUE,
-            model_name TEXT NOT NULL,
-            embedding_vector BLOB NOT NULL,
-            vector_dimension INTEGER,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(chunk_id) REFERENCES Chunk(chunk_id) ON DELETE CASCADE
-        )
-        """
-    )
-
-    conn.commit()
-    conn.close()
-
-
-def _connect(db_path: Optional[str] = None):
-    db_file = db_path or str(get_default_db_path())
+def _connect_structured(db_path: Optional[str] = None):
+    """Connexion à la base de données structurée."""
+    db_file = db_path or str(get_structured_db_path())
     conn = sqlite3.connect(db_file)
     conn.row_factory = sqlite3.Row
     return conn
 
 
-def add_oeuvre(file_name: str, file_path: str, title: Optional[str] = None, 
-               description: Optional[str] = None, word_count: Optional[int] = None, 
-               artist: Optional[str] = None, pdf_link: Optional[str] = None, 
-               db_path: Optional[str] = None) -> int:
-    """Insère une œuvre et retourne son id. Évite les doublons basés sur (title, file_name)."""
-    conn = _connect(db_path)
-    cur = conn.cursor()
+def init_structured_db(db_path: Optional[str] = None) -> None:
+    """Initialise la base SQLite avec les nouvelles tables structurées sur la base existante."""
+    print("⚠️ Pour migrer la base museum_v1.db existante, utilisez plutôt:")
+    print("   python migrate_museum_v1.py")
+    print("Cette fonction est maintenant adaptée pour la base migrée.")
     
-    # Vérifier si l'œuvre existe déjà
-    if title and file_name:
-        cur.execute("SELECT oeuvre_id FROM oeuvres WHERE title = ? AND file_name = ?", (title, file_name))
-        existing = cur.fetchone()
-        if existing:
-            print(f"⚠️  Œuvre '{title}' ({file_name}) existe déjà (ID: {existing[0]})")
-            conn.close()
-            return existing[0]
+    db_file = db_path or str(get_structured_db_path())
     
-    # Insérer la nouvelle œuvre avec pdf_link et room
-    cur.execute(
-        "INSERT INTO oeuvres (file_name, file_path, title, description, word_count, artist, pdf_link, room) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (file_name, file_path, title, description, word_count, artist, pdf_link, 1),
-    )
-    oeuvre_id = cur.lastrowid
-    conn.commit()
-    conn.close()
-    return oeuvre_id
-
-# Alias pour compatibilité
-def add_document(file_name: str, file_path: str, title: Optional[str] = None, 
-                 description: Optional[str] = None, word_count: Optional[int] = None, 
-                 artist: Optional[str] = None, db_path: Optional[str] = None) -> int:
-    # Créer le pdf_link automatiquement pour tous les fichiers dans uploads/pdfs
-    pdf_link = f"/uploads/pdfs/{file_name}"
-    return add_oeuvre(file_name, file_path, title, description, word_count, artist, pdf_link, db_path)
-
-
-def get_oeuvre(oeuvre_id: int, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    conn = _connect(db_path)
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM oeuvres WHERE oeuvre_id = ?", (oeuvre_id,))
-    row = cur.fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-# Alias pour compatibilité
-def get_document(document_id: int, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
-    return get_oeuvre(document_id, db_path)
-
-
-def add_anecdote(oeuvre_id: int, anecdote: str, db_path: Optional[str] = None) -> int:
-    """Fonction obsolète - les anecdotes sont maintenant intégrées dans les chunks"""
-    # Ne fait plus rien - compatibilité maintenue
-    return 0
-
-
-def get_anecdotes(document_id: int, db_path: Optional[str] = None) -> List[str]:
-    conn = _connect(db_path)
-    cur = conn.cursor()
-    cur.execute("SELECT anecdote FROM anecdotes WHERE document_id = ? ORDER BY created_at", (document_id,))
-    rows = cur.fetchall()
-    conn.close()
-    return [r[0] for r in rows]
-
-
-def add_generation(query: str, criteria: str, model_name: str, response: str, 
-                   chunks_count: int, processing_time_ms: int, ollama_time_ms: int, 
-                   total_time_ms: int, db_path: Optional[str] = None) -> int:
-    """Ajoute un enregistrement de génération et retourne son id."""
-    conn = _connect(db_path)
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO generations (query, criteria, model_name, response, chunks_count, processing_time_ms, ollama_time_ms, total_time_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (query, criteria, model_name, response, chunks_count, processing_time_ms, ollama_time_ms, total_time_ms)
-    )
-    gen_id = cur.lastrowid
-    conn.commit()
-    conn.close()
-    return gen_id
-
-
-def add_parcours(criteria: str, museum_mapping: str, selected_works: str, route_plan: str, 
-                 guide_text: str, total_duration_minutes: int, model_name: str, 
-                 processing_time_ms: int, db_path: Optional[str] = None) -> int:
-    """Ajoute un parcours généré et retourne son id."""
-    conn = _connect(db_path)
-    cur = conn.cursor()
-    cur.execute(
-        "INSERT INTO parcours (criteria, museum_mapping, selected_works, route_plan, guide_text, total_duration_minutes, model_name, processing_time_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (criteria, museum_mapping, selected_works, route_plan, guide_text, total_duration_minutes, model_name, processing_time_ms)
-    )
-    parcours_id = cur.lastrowid
-    conn.commit()
-    conn.close()
-    return parcours_id
-
-
-def get_works_for_parcours(age_min: int, age_max: int, artwork_type: Optional[str] = None, 
-                          db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Récupère les œuvres adaptées aux critères d'âge et de type."""
-    conn = _connect(db_path)
-    cur = conn.cursor()
+    # Vérifier si la base existe
+    if not Path(db_file).exists():
+        print(f"❌ Base de données {db_file} non trouvée.")
+        print("Veuillez d'abord exécuter le script de migration:")
+        print("   python migrate_museum_v1.py")
+        return
     
-    query = """
-    SELECT * FROM oeuvres 
-    WHERE (age_min IS NULL OR age_min <= ?) 
-    AND (age_max IS NULL OR age_max >= ?)
-    """
-    params = [age_max, age_min]
-    
-    if artwork_type:
-        query += " AND (artwork_type = ? OR artwork_type IS NULL)"
-        params.append(artwork_type)
-    
-    query += " ORDER BY created_at DESC"
-    
-    cur.execute(query, params)
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-# ==================== RAG FUNCTIONS ====================
-
-def add_chunk(oeuvre_id: int, chunk_index: int, content: str, content_hash: str, 
-              token_count: Optional[int] = None, start_char: Optional[int] = None, 
-              end_char: Optional[int] = None, metadata: Optional[str] = None, 
-              db_path: Optional[str] = None) -> int:
-    """Ajoute un chunk d'œuvre pour le RAG."""
-    conn = _connect(db_path)
+    conn = sqlite3.connect(db_file)
     cur = conn.cursor()
-    cur.execute(
-        """INSERT INTO chunk (oeuvre_id, chunk_index, chunk_text, content_hash, 
-           token_count, start_char, end_char, metadata) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (oeuvre_id, chunk_index, content, content_hash, token_count, start_char, end_char, metadata)
-    )
-    chunk_id = cur.lastrowid
-    conn.commit()
-    conn.close()
-    return chunk_id
 
-
-def get_chunks_by_oeuvre(oeuvre_id: int, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Récupère tous les chunks d'une œuvre."""
-    conn = _connect(db_path)
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM chunk WHERE oeuvre_id = ? ORDER BY chunk_index", (oeuvre_id,))
-    rows = cur.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-# Alias pour compatibilité
-def get_chunks_by_document(document_id: int, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    return get_chunks_by_oeuvre(document_id, db_path)
-
-
-def add_embedding(chunk_id: int, model_name: str, embedding_vector: bytes, 
-                  vector_dimension: int, db_path: Optional[str] = None) -> int:
-    """Ajoute un embedding pour un chunk."""
-    conn = _connect(db_path)
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            """INSERT INTO embeddings (chunk_id, model_name, embedding_vector, vector_dimension) 
-               VALUES (?, ?, ?, ?)""",
-            (chunk_id, model_name, embedding_vector, vector_dimension)
-        )
-        embedding_id = cur.lastrowid
-        conn.commit()
-        return embedding_id
-    except sqlite3.IntegrityError:
-        cur.execute("SELECT id FROM embeddings WHERE chunk_id = ? AND model_name = ?", (chunk_id, model_name))
-        row = cur.fetchone()
-        return row[0] if row else None
-    finally:
+    # Vérifier que les tables existent déjà (après migration)
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    existing_tables = [row[0] for row in cur.fetchall()]
+    
+    required_tables = ['oeuvres', 'artistes', 'mouvements', 'sections', 'anecdotes']
+    missing_tables = [t for t in required_tables if t not in existing_tables]
+    
+    if missing_tables:
+        print(f"❌ Tables manquantes: {missing_tables}")
+        print("Exécutez d'abord: python migrate_museum_v1.py")
         conn.close()
-
-
-def get_embedding(chunk_id: int, model_name: str, db_path: Optional[str] = None) -> Optional[bytes]:
-    """Récupère l'embedding d'un chunk pour un modèle donné."""
-    conn = _connect(db_path)
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT embedding_vector FROM embeddings WHERE chunk_id = ? AND model_name = ?",
-        (chunk_id, model_name)
-    )
-    row = cur.fetchone()
+        return
+    
+    print("✅ Base de données museum_v1.db prête à être utilisée")
     conn.close()
-    return row[0] if row else None
+
+
+# ===== FONCTIONS POUR LES ARTISTES =====
+
+def add_artist(nom_complet: str, lieu_naissance: Optional[str] = None, 
+               date_naissance: Optional[str] = None, date_deces: Optional[str] = None,
+               db_path: Optional[str] = None) -> int:
+    """Ajoute un artiste et retourne son ID. Évite les doublons."""
+    conn = _connect_structured(db_path)
+    cur = conn.cursor()
+    
+    # Vérifier si l'artiste existe déjà
+    cur.execute("SELECT id_artiste FROM artistes WHERE nom_complet = ?", (nom_complet,))
+    existing = cur.fetchone()
+    if existing:
+        conn.close()
+        return existing['id_artiste']
+    
+    # Ajouter le nouvel artiste
+    cur.execute(
+        "INSERT INTO artistes (nom_complet, lieu_naissance, date_naissance, date_deces) VALUES (?, ?, ?, ?)",
+        (nom_complet, lieu_naissance, date_naissance, date_deces)
+    )
+    artist_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return artist_id
+
+
+def add_artistic_movement(nom: str, periode: Optional[str] = None,
+                         db_path: Optional[str] = None) -> int:
+    """Ajoute un mouvement artistique et retourne son ID. Évite les doublons."""
+    conn = _connect_structured(db_path)
+    cur = conn.cursor()
+    
+    # Vérifier si le mouvement existe déjà
+    cur.execute("SELECT id_mouvement FROM mouvements WHERE nom = ?", (nom,))
+    existing = cur.fetchone()
+    if existing:
+        conn.close()
+        return existing['id_mouvement']
+    
+    # Ajouter le nouveau mouvement
+    cur.execute(
+        "INSERT INTO mouvements (nom, periode) VALUES (?, ?)",
+        (nom, periode)
+    )
+    movement_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return movement_id
+
+
+def add_artwork(title: str, artist: Optional[str] = None, id_artiste: Optional[int] = None, 
+                id_mouvement: Optional[int] = None, date_creation: Optional[str] = None, 
+                technique: Optional[str] = None, provenance: Optional[str] = None,
+                image_link: Optional[str] = None, pdf_link: Optional[str] = None,
+                room: Optional[int] = None, file_name: Optional[str] = None,
+                file_path: Optional[str] = None, db_path: Optional[str] = None) -> int:
+    """Ajoute une œuvre d'art et retourne son ID."""
+    conn = _connect_structured(db_path)
+    cur = conn.cursor()
+    
+    # Vérifier si l'œuvre existe déjà (basé sur titre et artiste)
+    if artist:
+        cur.execute("SELECT oeuvre_id FROM oeuvres WHERE title = ? AND artist = ?", (title, artist))
+    else:
+        cur.execute("SELECT oeuvre_id FROM oeuvres WHERE title = ? AND artist IS NULL", (title,))
+    
+    existing = cur.fetchone()
+    if existing:
+        conn.close()
+        return existing['oeuvre_id']
+    
+    # Ajouter la nouvelle œuvre
+    cur.execute(
+        """INSERT INTO oeuvres 
+           (title, artist, id_artiste, id_mouvement, date_creation, technique, 
+            provenance, image_link, pdf_link, room, file_name, file_path) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (title, artist, id_artiste, id_mouvement, date_creation, technique,
+         provenance, image_link, pdf_link, room, file_name, file_path)
+    )
+    artwork_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return artwork_id
+
+
+def get_artwork(oeuvre_id: int, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Récupère une œuvre complète avec ses informations liées."""
+    conn = _connect_structured(db_path)
+    cur = conn.cursor()
+    
+    # Récupérer l'œuvre avec les informations de l'artiste et du mouvement
+    cur.execute("""
+        SELECT o.*, 
+               art.nom_complet as artist_full_name, art.lieu_naissance as artist_birthplace,
+               m.nom as movement_name, m.periode as movement_period
+        FROM oeuvres o
+        LEFT JOIN artistes art ON o.id_artiste = art.id_artiste
+        LEFT JOIN mouvements m ON o.id_mouvement = m.id_mouvement
+        WHERE o.oeuvre_id = ?
+    """, (oeuvre_id,))
+    
+    artwork_row = cur.fetchone()
+    if not artwork_row:
+        conn.close()
+        return None
+    
+    artwork = dict(artwork_row)
+    
+    # Récupérer les sections documentaires
+    cur.execute("""
+        SELECT type_section, contenu 
+        FROM sections 
+        WHERE id_oeuvre = ? 
+        ORDER BY id_section
+    """, (oeuvre_id,))
+    artwork['sections'] = [dict(row) for row in cur.fetchall()]
+    
+    # Récupérer les anecdotes
+    cur.execute("SELECT contenu, index_anecdote FROM anecdotes WHERE id_oeuvre = ?", (oeuvre_id,))
+    artwork['anecdotes'] = [dict(row) for row in cur.fetchall()]
+    
+    conn.close()
+    return artwork
+
+
+def add_documentary_section(oeuvre_id: int, type_section: str, contenu: str,
+                          db_path: Optional[str] = None) -> int:
+    """Ajoute une section documentaire et retourne son ID."""
+    conn = _connect_structured(db_path)
+    cur = conn.cursor()
+    
+    cur.execute(
+        "INSERT INTO sections (id_oeuvre, type_section, contenu) VALUES (?, ?, ?)",
+        (oeuvre_id, type_section, contenu)
+    )
+    section_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return section_id
+
+
+def add_anecdote_structured(oeuvre_id: int, contenu: str, index_anecdote: Optional[str] = None,
+                          db_path: Optional[str] = None) -> int:
+    """Ajoute une anecdote et retourne son ID."""
+    conn = _connect_structured(db_path)
+    cur = conn.cursor()
+    
+    cur.execute(
+        "INSERT INTO anecdotes (id_oeuvre, contenu, index_anecdote) VALUES (?, ?, ?)",
+        (oeuvre_id, contenu, index_anecdote)
+    )
+    anecdote_id = cur.lastrowid
+    conn.commit()
+    conn.close()
+    return anecdote_id
+
+
+def get_artwork_sections(oeuvre_id: int, type_section: Optional[str] = None,
+                        db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Récupère les sections documentaires d'une œuvre."""
+    conn = _connect_structured(db_path)
+    cur = conn.cursor()
+    
+    if type_section:
+        cur.execute(
+            "SELECT * FROM sections WHERE id_oeuvre = ? AND type_section = ? ORDER BY id_section",
+            (oeuvre_id, type_section)
+        )
+    else:
+        cur.execute(
+            "SELECT * FROM sections WHERE id_oeuvre = ? ORDER BY id_section",
+            (oeuvre_id,)
+        )
+    
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_artwork_anecdotes(oeuvre_id: int, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Récupère les anecdotes d'une œuvre."""
+    conn = _connect_structured(db_path)
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM anecdotes WHERE id_oeuvre = ?", (oeuvre_id,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def search_artworks(query: str, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Recherche d'œuvres par titre, artiste ou contenu."""
+    conn = _connect_structured(db_path)
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT DISTINCT o.oeuvre_id, o.title, o.artist, o.date_creation
+        FROM oeuvres o
+        LEFT JOIN sections s ON o.oeuvre_id = s.id_oeuvre
+        LEFT JOIN anecdotes an ON o.oeuvre_id = an.id_oeuvre
+        WHERE o.title LIKE ? OR o.artist LIKE ? OR s.contenu LIKE ? OR an.contenu LIKE ?
+        ORDER BY o.title
+    """, (f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"))
+    
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_all_artworks(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Récupère toutes les œuvres avec leurs informations de base."""
+    conn = _connect_structured(db_path)
+    cur = conn.cursor()
+    
+    cur.execute("""
+        SELECT o.oeuvre_id, o.title, o.artist, 
+               o.date_creation, m.nom as movement_name, o.pdf_link
+        FROM oeuvres o
+        LEFT JOIN mouvements m ON o.id_mouvement = m.id_mouvement
+        ORDER BY o.title
+    """)
+    
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 
 if __name__ == "__main__":
-    init_db()
-    print(f"Base de données initialisée: {get_default_db_path()}")
+    # Initialiser la base de données
+    init_structured_db()
+    print("Base de données structurée initialisée !")

@@ -17,23 +17,44 @@ export async function POST(request: NextRequest) {
     if (pdfFile) {
       // Sauvegarder le fichier dans le dossier public/uploads/pdfs
       const timestamp = Date.now()
-      const fileName = `${artworkId}_${timestamp}_${pdfFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
+      // Nettoyer l'artworkId pour éviter la duplication du préfixe "artwork"
+      const cleanArtworkId = artworkId.startsWith('artwork-') ? artworkId.substring(8) : artworkId
+      const fileName = `artwork_${cleanArtworkId}_${timestamp}_${pdfFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
       pdfLink = `/uploads/pdfs/${fileName}`
       
       try {
         const bytes = await pdfFile.arrayBuffer()
         const buffer = Buffer.from(bytes)
         
+        // Vérifier que le fichier commence bien par %PDF
+        const pdfHeader = buffer.subarray(0, 4).toString('ascii')
+        if (!pdfHeader.startsWith('%PDF')) {
+          console.error(`❌ Fichier invalide - En-tête: ${pdfHeader}`)
+          throw new Error('Le fichier uploadé n\'est pas un PDF valide')
+        }
+        
         // Écrire le fichier sur le disque
         const fs = require('fs')
         const path = require('path')
         const filePath = path.join(process.cwd(), 'public', 'uploads', 'pdfs', fileName)
         
+        // Créer le dossier si il n'existe pas
+        fs.mkdirSync(path.dirname(filePath), { recursive: true })
+        
         fs.writeFileSync(filePath, buffer)
-        console.log(`Fichier sauvegardé: ${fileName} (${pdfFile.size} bytes)`)
+        console.log(`✅ PDF valide sauvegardé: ${fileName} (${pdfFile.size} bytes)`)
+        
+        // Vérifier après sauvegarde
+        const savedBuffer = fs.readFileSync(filePath)
+        const savedHeader = savedBuffer.subarray(0, 4).toString('ascii')
+        if (!savedHeader.startsWith('%PDF')) {
+          fs.unlinkSync(filePath) // Supprimer le fichier corrompu
+          throw new Error('Corruption détectée après sauvegarde')
+        }
+        
       } catch (writeError) {
         console.error('Erreur lors de l\'écriture du fichier:', writeError)
-        throw new Error('Erreur lors de la sauvegarde du fichier PDF')
+        throw new Error(`Erreur lors de la sauvegarde du fichier PDF: ${writeError.message}`)
       }
     }
 

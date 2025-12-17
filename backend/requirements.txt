@@ -1,7 +1,11 @@
-# MuseumVoice V3 - Dépendances essentielles
+# MuseumVoice V3 - Système Structuré d'Œuvres d'Art
 
 # === OBLIGATOIRES ===
-# Traitement PDF
+# API Web
+flask>=3.1.0
+flask-cors>=6.0.0
+
+# Traitement PDF intelligent
 PyPDF2>=3.0.0
 
 # Base scientifique
@@ -15,9 +19,12 @@ requests>=2.28.0
 # psycopg2-binary supprimé - migration vers SQLite terminée
 
 # === RECOMMANDÉES (haute performance) ===
-# Embeddings et recherche vectorielle
+# Embeddings et recherche vectorielle pour RAG
 sentence-transformers>=2.2.0
 faiss-cpu>=1.7.2
+
+# Traitement avancé de texte
+torch>=2.0.0
 
 # Sécurité
 bcrypt>=4.0.0

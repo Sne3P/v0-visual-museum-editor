@@ -224,7 +224,9 @@ export function ExportDialog({ state, onClose }: ExportDialogProps) {
       let finalPdfLink = artwork.pdfLink
       
       if (artwork.tempPdfFile && artwork.tempPdfBase64) {
-        const fileName = `artwork_${artwork.id}_${Date.now()}.pdf`
+        // Éviter la duplication du préfixe "artwork" si l'ID commence déjà par "artwork-"
+        const cleanId = artwork.id.startsWith('artwork-') ? artwork.id.substring(8) : artwork.id
+        const fileName = `artwork_${cleanId}_${Date.now()}.pdf`
         tempPdfs.push({
           filename: fileName,
           base64: artwork.tempPdfBase64
