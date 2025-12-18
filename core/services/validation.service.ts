@@ -369,7 +369,9 @@ export function validateVerticalLink(link: VerticalLink, context: ValidationCont
  * (Important pour empêcher l'ajout/division de points invalid)
  */
 export function checkDuplicatePointsInPolygon(polygon: ReadonlyArray<{ x: number; y: number }>): boolean {
-  const tolerance = 0.5 // Distance minimale entre deux points (en unités grille)
+  // Points en PIXELS snappés au grid (40px)
+  // Tolérance : 1 pixel (bien en dessous de la demi-grille 20px)
+  const tolerance = 1
   
   for (let i = 0; i < polygon.length; i++) {
     for (let j = i + 1; j < polygon.length; j++) {

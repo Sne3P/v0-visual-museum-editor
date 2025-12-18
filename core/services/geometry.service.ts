@@ -21,6 +21,37 @@ export function snapToGrid(point: Point, gridSize: number = GRID_SIZE): Point {
 }
 
 /**
+ * Déduplique les points consécutifs identiques dans un polygone
+ * Garde le premier point si premier == dernier (polygon fermé)
+ */
+export function deduplicatePoints(points: Point[]): Point[] {
+  if (points.length < 2) return points
+  
+  const result: Point[] = [points[0]]
+  
+  for (let i = 1; i < points.length; i++) {
+    const prev = result[result.length - 1]
+    const curr = points[i]
+    
+    // Garder uniquement si différent du précédent
+    if (prev.x !== curr.x || prev.y !== curr.y) {
+      result.push(curr)
+    }
+  }
+  
+  // Si dernier point == premier point, retirer le dernier (polygon fermé auto)
+  if (result.length > 2) {
+    const first = result[0]
+    const last = result[result.length - 1]
+    if (first.x === last.x && first.y === last.y) {
+      result.pop()
+    }
+  }
+  
+  return result
+}
+
+/**
  * Test point dans polygone (winding number algorithm)
  */
 export function isPointInPolygon(point: Point, polygon: ReadonlyArray<Point>): boolean {
@@ -404,6 +435,7 @@ export function calculateDistanceInMeters(p1: Point, p2: Point): number {
 
 /**
  * Crée un polygone circulaire avec points snappés au grid
+ * Déduplique automatiquement les points qui tombent au même endroit après snap
  */
 export function createCirclePolygon(center: Point, radius: number, gridSize: number = GRID_SIZE): Point[] {
   const points: Point[] = []
@@ -419,7 +451,8 @@ export function createCirclePolygon(center: Point, radius: number, gridSize: num
     points.push(snapToGrid(point, gridSize))
   }
   
-  return points
+  // Dédupliquer les points (important pour petits cercles)
+  return deduplicatePoints(points)
 }
 
 /**
@@ -440,8 +473,8 @@ export function createTrianglePolygon(p1: Point, p2: Point, gridSize: number = G
     },
   ]
   
-  // Snapper tous les points au grid
-  return points.map(p => snapToGrid(p, gridSize))
+  // Snapper tous les points au grid et dédupliquer
+  return deduplicatePoints(points.map(p => snapToGrid(p, gridSize)))
 }
 
 /**
@@ -483,7 +516,8 @@ export function createArcPolygon(start: Point, dragPoint: Point, gridSize: numbe
     points.push(snapToGrid(point, gridSize))
   }
   
-  return points
+  // Dédupliquer les points (important pour petits arcs)
+  return deduplicatePoints(points)
 }
 
 /**
