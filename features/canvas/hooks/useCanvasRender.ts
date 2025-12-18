@@ -72,6 +72,16 @@ export function useCanvasRender({
     // 3. Feedback visuel drag/edit (NOUVEAU)
     renderDragFeedback(ctx, canvas, elementDrag, vertexEdit, state)
 
+    // 3.5. Feedback duplication invalide
+    if (state.duplicatingElement && !state.duplicatingElement.isValid && state.duplicatingElement.validationMessage) {
+      drawValidationMessage(
+        ctx,
+        state.duplicatingElement.validationMessage,
+        'error',
+        { x: canvas.width / 2, y: 50 }
+      )
+    }
+
     // 4. Prévisualisations de création
     renderCreationPreviews(ctx, canvas, state, shapeCreation, freeFormCreation)
 
@@ -133,7 +143,9 @@ function renderFloorElements(
 ) {
   currentFloor.rooms.forEach(room => {
     const isSelected = selection.isSelected('room', room.id)
-    drawRoom(ctx, room, state.zoom, state.pan, isSelected, false)
+    const isDuplicating = state.duplicatingElement?.elementId === room.id && state.duplicatingElement?.elementType === 'room'
+    const isValidDuplication = state.duplicatingElement?.isValid ?? true
+    drawRoom(ctx, room, state.zoom, state.pan, isSelected, false, true, isDuplicating, isValidDuplication)
   })
 
   currentFloor.walls?.forEach(wall => {
@@ -148,7 +160,9 @@ function renderFloorElements(
 
   currentFloor.artworks?.forEach(artwork => {
     const isSelected = selection.isSelected('artwork', artwork.id)
-    drawArtwork(ctx, artwork, state.zoom, state.pan, isSelected, false)
+    const isDuplicating = state.duplicatingElement?.elementId === artwork.id && state.duplicatingElement?.elementType === 'artwork'
+    const isValidDuplication = state.duplicatingElement?.isValid ?? true
+    drawArtwork(ctx, artwork, state.zoom, state.pan, isSelected, false, isDuplicating, isValidDuplication)
   })
 
   currentFloor.verticalLinks?.forEach(link => {

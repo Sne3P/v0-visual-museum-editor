@@ -12,7 +12,9 @@ export function drawArtwork(
   zoom: number,
   pan: Point,
   isSelected: boolean = false,
-  isHovered: boolean = false
+  isHovered: boolean = false,
+  isDuplicating: boolean = false,
+  isValidDuplication: boolean = true
 ) {
   const [x, y] = artwork.xy
   const pos = worldToCanvas({ x, y }, zoom, pan)
@@ -24,7 +26,10 @@ export function drawArtwork(
   ctx.beginPath()
   ctx.rect(pos.x - width/2, pos.y - height/2, width, height)
 
-  if (isSelected) {
+  // Couleur selon état (duplication invalide = rouge)
+  if (isDuplicating && !isValidDuplication) {
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.3)' // Rouge si duplication invalide
+  } else if (isSelected || isDuplicating) {
     ctx.fillStyle = COLORS.artworkSelected
   } else if (isHovered) {
     ctx.fillStyle = COLORS.artworkHovered
@@ -33,9 +38,18 @@ export function drawArtwork(
   }
   ctx.fill()
 
-  ctx.strokeStyle = COLORS.artworkStroke
-  ctx.lineWidth = isSelected ? STROKE_WIDTHS.artworkSelected : STROKE_WIDTHS.artworkDefault
+  // Contour rouge si invalide
+  if (isDuplicating && !isValidDuplication) {
+    ctx.strokeStyle = '#EF4444'
+    ctx.lineWidth = 3
+    ctx.setLineDash([8, 4])
+  } else {
+    ctx.strokeStyle = COLORS.artworkStroke
+    ctx.lineWidth = isSelected ? STROKE_WIDTHS.artworkSelected : STROKE_WIDTHS.artworkDefault
+    ctx.setLineDash([])
+  }
   ctx.stroke()
+  ctx.setLineDash([])
 
   // Icône image
   ctx.fillStyle = COLORS.artworkStroke

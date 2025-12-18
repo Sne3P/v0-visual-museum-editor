@@ -7,12 +7,99 @@
 
 import type { EditorState, Point, SelectedElement } from '@/core/entities'
 import { MIN_ZOOM, MAX_ZOOM, ZOOM_STEP, GRID_SIZE } from '@/core/constants'
-import { validateRoomGeometry } from './validation.service'
+import { validateRoomGeometry, validateArtworkPlacement } from './validation.service'
 import { snapToGrid } from './geometry.service'
 import { v4 as uuidv4 } from 'uuid'
 
 // Presse-papier global
 let clipboard: { element: SelectedElement; data: any } | null = null
+
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
+/**
+ * Supprimer un élément simple (room, artwork, door, wall)
+ */
+function deleteSimpleElement(
+  floor: any,
+  type: 'rooms' | 'artworks' | 'doors' | 'walls',
+  id: string
+): any {
+  return {
+    ...floor,
+    [type]: (floor[type] || []).filter((el: any) => el.id !== id)
+  }
+}
+
+/**
+ * Valider et supprimer un vertex
+ */
+function deleteVertex(
+  floor: any,
+  roomId: string,
+  vertexIndex: number
+): { success: boolean; floor?: any; reason?: string } {
+  const roomIndex = floor.rooms.findIndex((r: any) => r.id === roomId)
+  if (roomIndex === -1) return { success: false, reason: 'Room not found' }
+
+  const room = floor.rooms[roomIndex]
+  const newPolygon = room.polygon.filter((_: any, i: number) => i !== vertexIndex)
+
+  if (newPolygon.length < 3) {
+    return { success: false, reason: 'Minimum 3 points required' }
+  }
+
+  const updatedRoom = { ...room, polygon: newPolygon }
+  const validation = validateRoomGeometry(updatedRoom, { floor })
+
+  if (!validation.valid) {
+    return { success: false, reason: validation.message }
+  }
+
+  return {
+    success: true,
+    floor: {
+      ...floor,
+      rooms: floor.rooms.map((r: any, i: number) => i === roomIndex ? updatedRoom : r)
+    }
+  }
+}
+
+/**
+ * Valider et supprimer un segment (via vertex suivant)
+ */
+function deleteSegment(
+  floor: any,
+  roomId: string,
+  segmentIndex: number
+): { success: boolean; floor?: any; reason?: string } {
+  const roomIndex = floor.rooms.findIndex((r: any) => r.id === roomId)
+  if (roomIndex === -1) return { success: false, reason: 'Room not found' }
+
+  const room = floor.rooms[roomIndex]
+  const nextVertexIndex = (segmentIndex + 1) % room.polygon.length
+  const newPolygon = room.polygon.filter((_: any, i: number) => i !== nextVertexIndex)
+
+  if (newPolygon.length < 3) {
+    return { success: false, reason: 'Minimum 3 points required' }
+  }
+
+  const updatedRoom = { ...room, polygon: newPolygon }
+  const validation = validateRoomGeometry(updatedRoom, { floor })
+
+  if (!validation.valid) {
+    return { success: false, reason: validation.message }
+  }
+
+  return {
+    success: true,
+    floor: {
+      ...floor,
+      rooms: floor.rooms.map((r: any, i: number) => i === roomIndex ? updatedRoom : r)
+    }
+  }
+}
 
 // ============================================================
 // ACTIONS COMMUNES
@@ -36,101 +123,43 @@ export function executeSupprimer(
   if (!floor) return state
 
   let updatedFloor = { ...floor }
-  const skippedElements: string[] = [] // Pour tracking des éléments non supprimables
+  const skippedElements: string[] = []
   let successCount = 0
 
-  // SUPPRESSION EN CASCADE - Traiter chaque élément sélectionné
+  // SUPPRESSION EN CASCADE - Traiter chaque élément
   state.selectedElements.forEach(selected => {
     try {
-      if (selected.type === 'room') {
-        updatedFloor = {
-          ...updatedFloor,
-          rooms: updatedFloor.rooms.filter(r => r.id !== selected.id)
+      // Éléments simples (room, artwork, door, wall)
+      if (['room', 'artwork', 'door', 'wall'].includes(selected.type)) {
+        const typeMap: Record<string, 'rooms' | 'artworks' | 'doors' | 'walls'> = {
+          room: 'rooms',
+          artwork: 'artworks',
+          door: 'doors',
+          wall: 'walls'
         }
+        updatedFloor = deleteSimpleElement(updatedFloor, typeMap[selected.type], selected.id)
         successCount++
-      } 
-      else if (selected.type === 'artwork') {
-        updatedFloor = {
-          ...updatedFloor,
-          artworks: (updatedFloor.artworks || []).filter(a => a.id !== selected.id)
-        }
-        successCount++
-      } 
-      else if (selected.type === 'door') {
-        updatedFloor = {
-          ...updatedFloor,
-          doors: (updatedFloor.doors || []).filter(d => d.id !== selected.id)
-        }
-        successCount++
-      } 
-      else if (selected.type === 'wall') {
-        updatedFloor = {
-          ...updatedFloor,
-          walls: (updatedFloor.walls || []).filter(w => w.id !== selected.id)
-        }
-        successCount++
-      } 
-      else if (selected.type === 'vertex' && selected.roomId) {
-        const roomIndex = updatedFloor.rooms.findIndex(r => r.id === selected.roomId)
-        if (roomIndex !== -1 && selected.vertexIndex !== undefined) {
-          const room = updatedFloor.rooms[roomIndex]
-          const newPolygon = room.polygon.filter((_, i) => i !== selected.vertexIndex)
-          
-          // Vérifier minimum 3 points
-          if (newPolygon.length < 3) {
-            console.warn(`⚠️ Vertex non supprimable: minimum 3 points requis (${room.id})`)
-            skippedElements.push(`Vertex ${selected.vertexIndex}`)
-            return // Skip cet élément, continuer avec les autres
-          }
-          
-          // Valider la géométrie résultante
-          const updatedRoom = { ...room, polygon: newPolygon }
-          const validation = validateRoomGeometry(updatedRoom, { floor: updatedFloor })
-          
-          if (!validation.valid) {
-            console.warn(`⚠️ Vertex non supprimable: géométrie invalide (${validation.message})`)
-            skippedElements.push(`Vertex ${selected.vertexIndex}`)
-            return // Skip cet élément, continuer avec les autres
-          }
-          
-          // Suppression OK
-          updatedFloor = {
-            ...updatedFloor,
-            rooms: updatedFloor.rooms.map((r, i) => i === roomIndex ? updatedRoom : r)
-          }
+      }
+      // Vertex
+      else if (selected.type === 'vertex' && selected.roomId && selected.vertexIndex !== undefined) {
+        const result = deleteVertex(updatedFloor, selected.roomId, selected.vertexIndex)
+        if (result.success && result.floor) {
+          updatedFloor = result.floor
           successCount++
+        } else {
+          console.warn(`⚠️ Vertex ${selected.vertexIndex}: ${result.reason}`)
+          skippedElements.push(`Vertex ${selected.vertexIndex}`)
         }
-      } 
+      }
+      // Segment
       else if (selected.type === 'segment' && selected.roomId && selected.segmentIndex !== undefined) {
-        const roomIndex = updatedFloor.rooms.findIndex(r => r.id === selected.roomId)
-        if (roomIndex !== -1) {
-          const room = updatedFloor.rooms[roomIndex]
-          const nextVertexIndex = (selected.segmentIndex + 1) % room.polygon.length
-          const newPolygon = room.polygon.filter((_, i) => i !== nextVertexIndex)
-          
-          // Vérifier minimum 3 points
-          if (newPolygon.length < 3) {
-            console.warn(`⚠️ Segment non supprimable: minimum 3 points requis (${room.id})`)
-            skippedElements.push(`Segment ${selected.segmentIndex}`)
-            return // Skip cet élément, continuer avec les autres
-          }
-          
-          // Valider la géométrie résultante
-          const updatedRoom = { ...room, polygon: newPolygon }
-          const validation = validateRoomGeometry(updatedRoom, { floor: updatedFloor })
-          
-          if (!validation.valid) {
-            console.warn(`⚠️ Segment non supprimable: géométrie invalide (${validation.message})`)
-            skippedElements.push(`Segment ${selected.segmentIndex}`)
-            return // Skip cet élément, continuer avec les autres
-          }
-          
-          // Suppression OK
-          updatedFloor = {
-            ...updatedFloor,
-            rooms: updatedFloor.rooms.map((r, i) => i === roomIndex ? updatedRoom : r)
-          }
+        const result = deleteSegment(updatedFloor, selected.roomId, selected.segmentIndex)
+        if (result.success && result.floor) {
+          updatedFloor = result.floor
           successCount++
+        } else {
+          console.warn(`⚠️ Segment ${selected.segmentIndex}: ${result.reason}`)
+          skippedElements.push(`Segment ${selected.segmentIndex}`)
         }
       }
     } catch (error) {
@@ -193,10 +222,15 @@ export function executeDupliquer(
       }
       updatedFloor = { ...updatedFloor, rooms: [...updatedFloor.rooms, newRoom] }
       
+      // Valider la géométrie immédiatement
+      const validation = validateRoomGeometry(newRoom, { floor: updatedFloor, strictMode: true })
+      
       duplicatingElement = { 
         elementId: newRoom.id, 
         elementType: 'room',
-        originalCenter: snappedMousePos
+        originalCenter: snappedMousePos,
+        isValid: validation.valid,
+        validationMessage: validation.message
       }
     }
   } else if (selected.type === 'artwork') {
@@ -209,10 +243,15 @@ export function executeDupliquer(
       }
       updatedFloor = { ...updatedFloor, artworks: [...(updatedFloor.artworks || []), newArtwork] }
       
+      // Valider le placement
+      const validation = validateArtworkPlacement(newArtwork, { floor: updatedFloor, strictMode: true })
+      
       duplicatingElement = { 
         elementId: newArtwork.id, 
         elementType: 'artwork',
-        originalCenter: snappedMousePos
+        originalCenter: snappedMousePos,
+        isValid: validation.valid,
+        validationMessage: validation.message
       }
     }
   }
@@ -239,37 +278,55 @@ export function updateDuplicatingElementPosition(
   const floor = state.floors.find(f => f.id === currentFloorId)
   if (!floor) return state
 
-  let updatedFloor = { ...floor }
-  const { originalCenter } = state.duplicatingElement
+  const { elementType, elementId, originalCenter } = state.duplicatingElement
   const snappedPos = snapToGrid(newPosition, GRID_SIZE)
   const delta = { x: snappedPos.x - originalCenter.x, y: snappedPos.y - originalCenter.y }
 
-  if (state.duplicatingElement.elementType === 'room') {
-    const roomIndex = updatedFloor.rooms.findIndex(r => r.id === state.duplicatingElement!.elementId)
-    if (roomIndex !== -1) {
-      const room = updatedFloor.rooms[roomIndex]
-      const newPolygon = room.polygon.map(p => snapToGrid({ x: p.x + delta.x, y: p.y + delta.y }, GRID_SIZE))
-      updatedFloor = {
-        ...updatedFloor,
-        rooms: updatedFloor.rooms.map((r, i) => i === roomIndex ? { ...r, polygon: newPolygon } : r)
-      }
+  let updatedFloor = { ...floor }
+
+  let isValid = true
+  let validationMessage: string | undefined
+
+  if (elementType === 'room') {
+    const idx = updatedFloor.rooms.findIndex(r => r.id === elementId)
+    if (idx !== -1) {
+      const newPolygon = updatedFloor.rooms[idx].polygon.map(p => 
+        snapToGrid({ x: p.x + delta.x, y: p.y + delta.y }, GRID_SIZE)
+      )
+      const updatedRoom = { ...updatedFloor.rooms[idx], polygon: newPolygon }
+      updatedFloor.rooms = updatedFloor.rooms.map((r, i) => 
+        i === idx ? updatedRoom : r
+      )
+      
+      // Revalider avec TOUTES les contraintes (chevauchement, points dupliqués, etc.)
+      const validation = validateRoomGeometry(updatedRoom, { floor: updatedFloor, strictMode: true })
+      isValid = validation.valid
+      validationMessage = validation.message
     }
-  } else if (state.duplicatingElement.elementType === 'artwork') {
-    const artworkIndex = (updatedFloor.artworks || []).findIndex(a => a.id === state.duplicatingElement!.elementId)
-    if (artworkIndex !== -1) {
-      updatedFloor = {
-        ...updatedFloor,
-        artworks: updatedFloor.artworks!.map((a, i) => 
-          i === artworkIndex ? { ...a, xy: [snappedPos.x, snappedPos.y] as const } : a
-        )
-      }
+  } else if (elementType === 'artwork') {
+    const idx = (updatedFloor.artworks || []).findIndex(a => a.id === elementId)
+    if (idx !== -1) {
+      const updatedArtwork = { ...updatedFloor.artworks![idx], xy: [snappedPos.x, snappedPos.y] as const }
+      updatedFloor.artworks = updatedFloor.artworks!.map((a, i) => 
+        i === idx ? updatedArtwork : a
+      )
+      
+      // Revalider le placement
+      const validation = validateArtworkPlacement(updatedArtwork, { floor: updatedFloor, strictMode: true })
+      isValid = validation.valid
+      validationMessage = validation.message
     }
   }
 
   return {
     ...state,
     floors: state.floors.map(f => f.id === currentFloorId ? updatedFloor : f),
-    duplicatingElement: { ...state.duplicatingElement, originalCenter: snappedPos }
+    duplicatingElement: { 
+      ...state.duplicatingElement, 
+      originalCenter: snappedPos,
+      isValid,
+      validationMessage
+    }
   }
 }
 
@@ -282,19 +339,11 @@ export function finalizeDuplication(
 ): EditorState {
   if (!state.duplicatingElement) return state
 
-  const floor = state.floors.find(f => f.id === currentFloorId)
-  if (!floor) return state
-
-  // Valider la position finale
-  if (state.duplicatingElement.elementType === 'room') {
-    const room = floor.rooms.find(r => r.id === state.duplicatingElement!.elementId)
-    if (room) {
-      const validation = validateRoomGeometry(room, { floor, strictMode: true })
-      if (!validation.valid) {
-        // Annuler si invalide
-        return cancelDuplication(state, currentFloorId)
-      }
-    }
+  // Vérifier si la duplication est valide
+  if (!state.duplicatingElement.isValid) {
+    console.warn('❌ Duplication annulée: position invalide -', state.duplicatingElement.validationMessage)
+    // Annuler la duplication si invalide
+    return cancelDuplication(state, currentFloorId)
   }
 
   return {

@@ -126,5 +126,7 @@ export interface EditorState {
     elementId: string
     elementType: 'room' | 'artwork'
     originalCenter: Point
+    isValid: boolean
+    validationMessage?: string
   } | null
 }

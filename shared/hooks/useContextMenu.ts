@@ -151,124 +151,76 @@ export function useContextMenu({
       let saveHistory = true
       let historyLabel = ''
       
-      switch (action) {
-        // ===== ACTIONS COMMUNES =====
-        case 'supprimer': {
+      // Mapping action → (service call, history)
+      const actionHandlers: Record<string, () => void> = {
+        supprimer: () => {
           const newState = executeSupprimer(state, currentFloor.id)
-          updates = {
-            floors: newState.floors,
-            selectedElements: newState.selectedElements,
-          }
+          updates = { floors: newState.floors, selectedElements: newState.selectedElements }
           historyLabel = 'Supprimer élément'
-          break
-        }
-        
-        case 'dupliquer': {
+        },
+        dupliquer: () => {
           const newState = executeDupliquer(state, currentFloor.id, lastWorldPos)
-          updates = {
-            floors: newState.floors,
-            selectedElements: newState.selectedElements,
-            duplicatingElement: newState.duplicatingElement,
-            contextMenu: null
-          }
+          updates = { floors: newState.floors, selectedElements: newState.selectedElements, duplicatingElement: newState.duplicatingElement, contextMenu: null }
           saveHistory = false
-          break
-        }
-        
-        case 'coller': {
+        },
+        coller: () => {
           const newState = executeColler(state, currentFloor.id)
-          updates = {
-            floors: newState.floors,
-          }
+          updates = { floors: newState.floors }
           historyLabel = 'Coller'
-          break
-        }
-        
-        case 'proprietes': {
+        },
+        proprietes: () => {
           if (state.contextMenu?.elementId && state.contextMenu?.elementType) {
             onOpenPropertiesModal?.(
               state.contextMenu.elementType as 'room' | 'artwork' | 'wall' | 'door' | 'verticalLink',
               state.contextMenu.elementId
             )
           }
-          // Ne pas fermer le menu pour proprietes, laisser l'utilisateur le faire
           saveHistory = false
-          break
-          break
-        }
-        
-        case 'proprietes': {
-          if (state.contextMenu?.elementId && state.contextMenu?.elementType) {
-            executeProprietes(state, state.contextMenu.elementId, state.contextMenu.elementType)
-            // No state update needed
-            saveHistory = false
-          }
-          break
-        }
-        
-        // ===== ACTIONS SEGMENT =====
-        case 'ajouter_vertex': {
+        },
+        ajouter_vertex: () => {
           const newState = executeAjouterVertex(state, currentFloor.id, lastWorldPos)
-          updates = {
-            floors: newState.floors,
-            selectedElements: newState.selectedElements,
-          }
+          updates = { floors: newState.floors, selectedElements: newState.selectedElements }
           historyLabel = 'Ajouter un sommet'
-          break
-        }
-        
-        case 'diviser': {
+        },
+        diviser: () => {
           const newState = executeDiviserSegment(state, currentFloor.id)
-          updates = {
-            floors: newState.floors,
-            selectedElements: newState.selectedElements,
-          }
+          updates = { floors: newState.floors, selectedElements: newState.selectedElements }
           historyLabel = 'Diviser un segment'
-          break
-        }
-        
-        // ===== ACTIONS ZOOM/PAN =====
-        case 'zoom_avant': {
-          const newState = executeZoomAvant(state)
-          updates = { zoom: newState.zoom }
+        },
+        zoom_avant: () => {
+          updates = { zoom: executeZoomAvant(state).zoom }
           saveHistory = false
-          break
-        }
-        
-        case 'zoom_arriere': {
-          const newState = executeZoomArriere(state)
-          updates = { zoom: newState.zoom }
+        },
+        zoom_arriere: () => {
+          updates = { zoom: executeZoomArriere(state).zoom }
           saveHistory = false
-          break
-        }
-        
-        case 'reinitialiser_zoom': {
+        },
+        reinitialiser_zoom: () => {
           const newState = executeReinitialiserZoom(state)
           updates = { zoom: newState.zoom, pan: newState.pan }
           saveHistory = false
-          break
-        }
-        
-        case 'ajuster_vue': {
+        },
+        ajuster_vue: () => {
           const canvas = canvasRef?.current
           if (canvas) {
             const newState = executeAjusterVue(state, currentFloor.id, canvas.width, canvas.height)
             updates = { zoom: newState.zoom, pan: newState.pan }
             saveHistory = false
           }
-          break
-        }
-        
-        case 'actualiser': {
+        },
+        actualiser: () => {
           executeActualiser(state)
-          // Force re-render with no state change
           updates = {}
           saveHistory = false
-          break
-        }
-        
-        default:
-          console.log('Action non implémentée:', action)
+        },
+      }
+      
+      // Exécuter l'action si elle existe
+      const handler = actionHandlers[action]
+      if (handler) {
+        handler()
+      } else {
+        console.warn('Action non implémentée:', action)
       }
       
       // Appliquer les modifications

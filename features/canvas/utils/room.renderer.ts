@@ -14,16 +14,18 @@ export function drawRoom(
   pan: Point,
   isSelected: boolean = false,
   isHovered: boolean = false,
-  showValidation: boolean = true
+  showValidation: boolean = true,
+  isDuplicating: boolean = false,
+  isValidDuplication: boolean = true
 ) {
   if (room.polygon.length < 3) return
 
   // Convertir les points du polygone en coordonnées canvas
   const canvasPoints = room.polygon.map(p => worldToCanvas(p, zoom, pan))
 
-  // Validation temps réel
-  const validation = showValidation ? validateRoomGeometry(room) : null
-  const hasError = validation !== null && !validation.valid
+  // Validation temps réel (sauf si en duplication, on utilise l'état de duplication)
+  const validation = (showValidation && !isDuplicating) ? validateRoomGeometry(room) : null
+  const hasError = isDuplicating ? !isValidDuplication : (validation !== null && !validation.valid)
 
   // Remplissage
   ctx.beginPath()
@@ -35,9 +37,9 @@ export function drawRoom(
 
   // Couleur de fond avec états de validation
   if (hasError) {
-    ctx.fillStyle = 'rgba(239, 68, 68, 0.15)' // Rouge si erreur
-  } else if (isSelected) {
-    ctx.fillStyle = 'rgba(59, 130, 246, 0.2)' // Bleu si sélectionné
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.2)' // Rouge si erreur (plus opaque)
+  } else if (isSelected || isDuplicating) {
+    ctx.fillStyle = 'rgba(59, 130, 246, 0.2)' // Bleu si sélectionné ou en duplication
   } else if (isHovered) {
     ctx.fillStyle = 'rgba(59, 130, 246, 0.15)' // Bleu clair si survolé
   } else {
@@ -49,8 +51,8 @@ export function drawRoom(
   if (hasError) {
     ctx.strokeStyle = '#EF4444' // Rouge
     ctx.lineWidth = 3
-    ctx.setLineDash([5, 5]) // Pointillés pour erreur
-  } else if (isSelected) {
+    ctx.setLineDash([8, 4]) // Pointillés épais pour erreur
+  } else if (isSelected || isDuplicating) {
     ctx.strokeStyle = '#3B82F6' // Bleu
     ctx.lineWidth = 3
     ctx.setLineDash([])

@@ -99,6 +99,23 @@ export function distanceToSegment(point: Point, segStart: Point, segEnd: Point):
  * Retourne false si les polygones se touchent uniquement (arêtes communes ou points communs)
  */
 export function polygonsOverlap(poly1: ReadonlyArray<Point>, poly2: ReadonlyArray<Point>): boolean {
+  // 0. NOUVEAU: Détecter superposition complète ou partielle de segments
+  // Si deux polygones ont des segments colinéaires qui se chevauchent, c'est un overlap
+  for (let i = 0; i < poly1.length; i++) {
+    const a1 = poly1[i]
+    const a2 = poly1[(i + 1) % poly1.length]
+    
+    for (let j = 0; j < poly2.length; j++) {
+      const b1 = poly2[j]
+      const b2 = poly2[(j + 1) % poly2.length]
+      
+      // Vérifier si les segments sont colinéaires et se chevauchent
+      if (segmentsAreCollinearAndOverlap(a1, a2, b1, b2)) {
+        return true
+      }
+    }
+  }
+  
   // 1. Vérifier si des sommets de poly1 sont strictement à l'intérieur de poly2
   for (const vertex of poly1) {
     if (isPointStrictlyInsidePolygon(vertex, poly2)) {
@@ -130,6 +147,77 @@ export function polygonsOverlap(poly1: ReadonlyArray<Point>, poly2: ReadonlyArra
   }
   
   return false
+}
+
+/**
+ * Vérifie si deux segments sont colinéaires et se SUPERPOSENT (même direction)
+ * Cas critique: deux pièces identiques superposées
+ * 
+ * IMPORTANT: Distingue contact externe (opposé) vs superposition (même direction)
+ * - Contact externe: segments dans directions opposées = AUTORISÉ
+ * - Superposition: segments dans même direction = INTERDIT
+ */
+function segmentsAreCollinearAndOverlap(a1: Point, a2: Point, b1: Point, b2: Point, tolerance: number = 1.0): boolean {
+  // Vérifier si les 4 points sont colinéaires
+  const crossProduct1 = Math.abs(crossProduct(a1, a2, b1))
+  const crossProduct2 = Math.abs(crossProduct(a1, a2, b2))
+  
+  // Si pas colinéaires, pas de chevauchement
+  if (crossProduct1 > tolerance || crossProduct2 > tolerance) {
+    return false
+  }
+  
+  // Les segments sont colinéaires, vérifier s'ils se chevauchent
+  // Projeter tous les points sur l'axe du segment a1-a2
+  const dx = a2.x - a1.x
+  const dy = a2.y - a1.y
+  const length = Math.sqrt(dx * dx + dy * dy)
+  
+  if (length < 0.01) return false // Segment dégénéré
+  
+  // Normaliser le vecteur direction
+  const ux = dx / length
+  const uy = dy / length
+  
+  // Projeter les points sur l'axe
+  const t_a1 = 0
+  const t_a2 = length
+  const t_b1 = (b1.x - a1.x) * ux + (b1.y - a1.y) * uy
+  const t_b2 = (b2.x - a1.x) * ux + (b2.y - a1.y) * uy
+  
+  // Ordonner les projections de b1 et b2
+  const t_b_min = Math.min(t_b1, t_b2)
+  const t_b_max = Math.max(t_b1, t_b2)
+  
+  // Vérifier chevauchement des intervalles [0, length] et [t_b_min, t_b_max]
+  const overlap_start = Math.max(t_a1, t_b_min)
+  const overlap_end = Math.min(t_a2, t_b_max)
+  
+  // Pas de chevauchement si intersection trop petite
+  if ((overlap_end - overlap_start) <= tolerance) {
+    return false
+  }
+  
+  // ✅ NOUVEAU: Vérifier l'ORIENTATION des segments
+  // Si segments dans directions opposées = contact externe (AUTORISÉ)
+  // Si segments dans même direction = superposition (INTERDIT)
+  
+  const vec_a = { x: a2.x - a1.x, y: a2.y - a1.y }
+  const vec_b = { x: b2.x - b1.x, y: b2.y - b1.y }
+  
+  // Produit scalaire: positif = même direction, négatif = opposé
+  const dotProduct = vec_a.x * vec_b.x + vec_a.y * vec_b.y
+  
+  // Si même direction (dotProduct > 0) = SUPERPOSITION
+  // Si direction opposée (dotProduct < 0) = CONTACT EXTERNE (autorisé)
+  return dotProduct > 0
+}
+
+/**
+ * Produit vectoriel pour détecter colinéarité
+ */
+function crossProduct(p1: Point, p2: Point, p3: Point): number {
+  return (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x)
 }
 
 /**
