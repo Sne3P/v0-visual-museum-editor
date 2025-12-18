@@ -8,11 +8,13 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { Canvas } from "@/features/canvas"
-import { Toolbar, FloorTabs, PropertiesPanel, ArtworkPdfDialog } from "./components"
+import { Toolbar, FloorTabs, ArtworkPdfDialog } from "./components"
 import { HistoryButtons } from "@/shared/components/HistoryButtons"
-import { useHistory } from "@/shared/hooks"
-import type { EditorState, Tool, Floor, Artwork, MeasurementState } from "@/core/entities"
+import { PropertiesModal } from "@/shared/components/PropertiesModal"
+import { useHistory, useKeyboardShortcuts } from "@/shared/hooks"
+import type { EditorState, Tool, Floor, Artwork, MeasurementState, SelectedElement } from "@/core/entities"
 import { HISTORY_ACTIONS } from "@/core"
+import { executeSupprimer, executeCopier, executeColler } from "@/core/services"
 import { v4 as uuidv4 } from "uuid"
 
 export function MuseumEditor() {
@@ -43,7 +45,8 @@ export function MuseumEditor() {
       showMeasurements: true,
       showDynamicMeasurements: false,
       measurements: []
-    }
+    },
+    duplicatingElement: null
   })
 
   const [pdfDialogArtwork, setPdfDialogArtwork] = useState<Artwork | null>(null)
@@ -55,6 +58,8 @@ export function MuseumEditor() {
     showDynamicMeasurements: false,
     measurements: []
   })
+  const [propertiesModalOpen, setPropertiesModalOpen] = useState(false)
+  const [propertiesElement, setPropertiesElement] = useState<{ type?: 'room' | 'artwork' | 'wall' | 'door' | 'verticalLink', id?: string }>({})
 
   const currentFloor = state.floors.find((f) => f.id === state.currentFloorId)!
 
@@ -145,6 +150,17 @@ export function MuseumEditor() {
       setState(prevState => ({ ...prevState, ...updates }))
     }
   }, [updateStateWithHistory])
+
+  // Ouvrir le modal propriétés
+  const handleOpenPropertiesModal = useCallback((type: 'room' | 'artwork' | 'wall' | 'door' | 'verticalLink', id: string) => {
+    setPropertiesElement({ type, id })
+    setPropertiesModalOpen(true)
+  }, [])
+
+  const handleClosePropertiesModal = useCallback(() => {
+    setPropertiesModalOpen(false)
+    setPropertiesElement({})
+  }, [])
 
   // ==================== TOOLS ====================
 
@@ -262,36 +278,65 @@ export function MuseumEditor() {
 
   // ==================== RACCOURCIS CLAVIER ====================
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl+Z / Cmd+Z : Undo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
-        e.preventDefault()
-        handleUndo()
-      }
+  const handleDelete = useCallback(() => {
+    if (state.selectedElements.length === 0) return
+    const newState = executeSupprimer(state, currentFloor.id)
+    updateState(
+      {
+        floors: newState.floors,
+        selectedElements: newState.selectedElements
+      },
+      true,
+      'Supprimer élément(s)'
+    )
+  }, [state, currentFloor.id, updateState])
 
-      // Ctrl+Shift+Z / Cmd+Shift+Z : Redo
-      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey) {
-        e.preventDefault()
-        handleRedo()
-      }
+  const handleDuplicate = useCallback(() => {
+    if (state.selectedElements.length === 0) return
+    // TODO: Implémenter duplication via raccourci
+    console.log('TODO: Dupliquer', state.selectedElements)
+  }, [state.selectedElements])
 
-      // Ctrl+S / Cmd+S : Save
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault()
-        handleManualSave()
-      }
+  const handleCopy = useCallback(() => {
+    if (state.selectedElements.length === 0) return
+    const newState = executeCopier(state, currentFloor.id)
+    updateState({ floors: newState.floors }, false)
+  }, [state, currentFloor.id, updateState])
 
-      // Espace : Pan mode temporaire
-      if (e.key === ' ' && !e.repeat) {
-        e.preventDefault()
-        // TODO: Activer le pan temporaire
-      }
-    }
+  const handlePaste = useCallback(() => {
+    const newState = executeColler(state, currentFloor.id)
+    updateState({ floors: newState.floors }, true, 'Coller')
+  }, [state, currentFloor.id, updateState])
 
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [handleUndo, handleRedo, handleManualSave])
+  const handleSelectAll = useCallback(() => {
+    const allElements: SelectedElement[] = [
+      ...currentFloor.rooms.map(r => ({ type: 'room' as const, id: r.id })),
+      ...(currentFloor.walls || []).map(w => ({ type: 'wall' as const, id: w.id })),
+      ...(currentFloor.doors || []).map(d => ({ type: 'door' as const, id: d.id })),
+      ...(currentFloor.artworks || []).map(a => ({ type: 'artwork' as const, id: a.id })),
+    ]
+    updateState({ selectedElements: allElements }, false)
+  }, [currentFloor, updateState])
+
+  const handleDeselectAll = useCallback(() => {
+    updateState({ selectedElements: [], contextMenu: null }, false)
+  }, [updateState])
+
+  // Hook centralisé des raccourcis clavier
+  useKeyboardShortcuts({
+    state,
+    onUndo: handleUndo,
+    onRedo: handleRedo,
+    onSave: handleManualSave,
+    onDelete: handleDelete,
+    onDuplicate: handleDuplicate,
+    onCopy: handleCopy,
+    onPaste: handlePaste,
+    onSelectAll: handleSelectAll,
+    onDeselectAll: handleDeselectAll,
+    onToolChange: handleToolChange,
+    enabled: true
+  })
 
   // ==================== RENDU ====================
 
@@ -399,20 +444,14 @@ export function MuseumEditor() {
               updateState={updateState}
               currentFloor={currentFloor}
               onArtworkDoubleClick={handleArtworkDoubleClick}
+              onOpenPropertiesModal={handleOpenPropertiesModal}
             />
           </div>
         </div>
 
-        {/* Properties panel */}
-        <PropertiesPanel
-          state={state}
-          currentFloor={currentFloor}
-          updateState={updateState}
-          saveToHistory={saveToHistory}
-        />
       </div>
 
-      {/* PDF Dialog */}
+      {/* PDF Dialog - on-demand modal for artwork */}
       {pdfDialogArtwork && (
         <ArtworkPdfDialog
           artwork={pdfDialogArtwork}
@@ -427,6 +466,17 @@ export function MuseumEditor() {
           }}
         />
       )}
+
+      {/* Properties Modal - on-demand modal for element properties */}
+      <PropertiesModal
+        isOpen={propertiesModalOpen}
+        elementType={propertiesElement.type}
+        elementId={propertiesElement.id}
+        state={state}
+        currentFloor={currentFloor}
+        updateState={updateState}
+        onClose={handleClosePropertiesModal}
+      />
     </div>
   )
 }

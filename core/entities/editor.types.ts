@@ -57,6 +57,18 @@ export interface HoverInfo {
   readonly segmentIndex?: number
 }
 
+// Actions du menu contextuel
+export type ContextMenuAction =
+  | 'supprimer' | 'dupliquer' | 'copier' | 'proprietes'
+  | 'editer_vertices' | 'convertir_rectangle' | 'convertir_cercle' | 'convertir_triangle' | 'convertir_arc'
+  | 'diviser' | 'fusionner' | 'creer_porte'
+  | 'retourner' | 'changer_type'
+  | 'pivoter' | 'redimensionner'
+  | 'aller_haut' | 'aller_bas' | 'changer_type_lien'
+  | 'editer_segment' | 'ajouter_vertex'
+  | 'zoom_avant' | 'zoom_arriere' | 'reinitialiser_zoom' | 'ajuster_vue' | 'recentrer' | 'actualiser' | 'coller'
+  | 'separator'
+
 export interface ContextMenuState {
   readonly visible: boolean
   readonly x: number
@@ -64,6 +76,7 @@ export interface ContextMenuState {
   readonly type: "element" | "background" | null
   readonly elementId?: string
   readonly elementType?: ElementType
+  readonly worldPos?: Point
 }
 
 export interface MeasurementDisplay {
@@ -109,4 +122,9 @@ export interface EditorState {
   readonly historyIndex: number
   readonly contextMenu: ContextMenuState | null
   readonly measurements: MeasurementState
+  readonly duplicatingElement?: {
+    elementId: string
+    elementType: 'room' | 'artwork'
+    originalCenter: Point
+  } | null
 }

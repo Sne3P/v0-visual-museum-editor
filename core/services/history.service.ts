@@ -47,6 +47,7 @@ export function addToHistory(
   
   if (shouldMerge) {
     // Mettre à jour l'entrée existante au lieu de créer une nouvelle
+    // On garde le timestamp original pour éviter de merger indéfiniment
     history[history.length - 1] = createHistoryEntry(newState, description, lastEntry.timestamp)
     return {
       history,
@@ -54,8 +55,8 @@ export function addToHistory(
     }
   }
   
-  // Créer nouvelle entrée
-  const newEntry = createHistoryEntry(currentState, description, now)
+  // Créer nouvelle entrée avec le NOUVEL état (pas l'ancien!)
+  const newEntry = createHistoryEntry(newState, description, now)
   history.push(newEntry)
   
   // Limiter la taille de l'historique

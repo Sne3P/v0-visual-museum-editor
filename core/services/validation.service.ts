@@ -43,6 +43,49 @@ export function validateRoomGeometry(room: Room, context?: ValidationContext): E
     }
   }
 
+  // 1.5. Vérifier pas de points dupliqués dans le même polygone
+  if (!checkDuplicatePointsInPolygon(room.polygon)) {
+    return {
+      valid: false,
+      severity: 'error',
+      code: 'ROOM_DUPLICATE_POINTS',
+      message: 'Deux points de la même pièce ne peuvent pas être au même endroit',
+      visualFeedback: {
+        color: VISUAL_FEEDBACK.colors.invalid,
+        opacity: 0.5,
+        strokeWidth: 3
+      }
+    }
+  }
+
+  // 1.6. Vérifier que les segments ne se croisent pas dans le même polygone
+  for (let i = 0; i < room.polygon.length; i++) {
+    const seg1Start = room.polygon[i]
+    const seg1End = room.polygon[(i + 1) % room.polygon.length]
+    
+    for (let j = i + 2; j < room.polygon.length; j++) {
+      // Ne pas vérifier les segments adjacents
+      if (j === (i + 1) % room.polygon.length || (j + 1) % room.polygon.length === i) continue
+      
+      const seg2Start = room.polygon[j]
+      const seg2End = room.polygon[(j + 1) % room.polygon.length]
+      
+      if (checkSegmentIntersection(seg1Start, seg1End, seg2Start, seg2End)) {
+        return {
+          valid: false,
+          severity: 'error',
+          code: 'ROOM_SELF_INTERSECTING',
+          message: 'Les segments de la pièce ne peuvent pas se croiser',
+          visualFeedback: {
+            color: VISUAL_FEEDBACK.colors.invalid,
+            opacity: 0.5,
+            strokeWidth: 3
+          }
+        }
+      }
+    }
+  }
+
   // 2. Vérifier la superficie minimum
   const area = calculatePolygonAreaInMeters(room.polygon)
   if (area < CONSTRAINTS.room.minArea) {
@@ -319,5 +362,136 @@ export function validateVerticalLink(link: VerticalLink, context: ValidationCont
     }
   }
 
+  return { valid: true }
+}
+/**
+ * VALIDATION STRICTE: Vérifie qu'aucun point ne se chevauche dans la même forme
+ * (Important pour empêcher l'ajout/division de points invalid)
+ */
+export function checkDuplicatePointsInPolygon(polygon: ReadonlyArray<{ x: number; y: number }>): boolean {
+  const tolerance = 0.5 // Distance minimale entre deux points (en unités grille)
+  
+  for (let i = 0; i < polygon.length; i++) {
+    for (let j = i + 1; j < polygon.length; j++) {
+      const dx = polygon[i].x - polygon[j].x
+      const dy = polygon[i].y - polygon[j].y
+      const distance = Math.sqrt(dx * dx + dy * dy)
+      
+      // Si deux points sont trop proches, c'est un doublon
+      if (distance < tolerance) {
+        return false // Points dupliqués détectés
+      }
+    }
+  }
+  
+  return true // Tous les points sont distincts
+}
+
+/**
+ * VALIDATION STRICTE: Vérifie qu'une polyligne reste valide après modification
+ * (Au minimum 3 points, pas de points dupliqués, forme valide)
+ */
+export function validatePolygonIntegrity(polygon: ReadonlyArray<{ x: number; y: number }>): { valid: boolean; reason?: string } {
+  // Vérifier le nombre minimum de points
+  if (polygon.length < 3) {
+    return { valid: false, reason: 'Le polygone doit avoir au moins 3 points' }
+  }
+  
+  // Vérifier pas de points dupliqués
+  if (!checkDuplicatePointsInPolygon(polygon)) {
+    return { valid: false, reason: 'Deux points ne peuvent pas être au même endroit' }
+  }
+  
+  return { valid: true }
+}
+
+/**
+ * VALIDATION STRICTE: Vérifie que deux segments ne se croisent pas
+ */
+export function checkSegmentIntersection(
+  seg1Start: { x: number; y: number },
+  seg1End: { x: number; y: number },
+  seg2Start: { x: number; y: number },
+  seg2End: { x: number; y: number }
+): boolean {
+  // Si les segments partagent un point, c'est autorisé (adjacents)
+  const shareStart = seg1Start.x === seg2Start.x && seg1Start.y === seg2Start.y
+  const shareEnd = seg1Start.x === seg2End.x && seg1Start.y === seg2End.y
+  const shareCross1 = seg1End.x === seg2Start.x && seg1End.y === seg2Start.y
+  const shareCross2 = seg1End.x === seg2End.x && seg1End.y === seg2End.y
+  
+  if (shareStart || shareEnd || shareCross1 || shareCross2) {
+    return false // Pas d'intersection (juste adjacents)
+  }
+  
+  // Utiliser la fonction existante pour vérifier l'intersection
+  // segmentsIntersect attend des tuples [Point, Point]
+  return segmentsIntersect([seg1Start, seg1End] as const, [seg2Start, seg2End] as const)
+}
+
+/**
+ * VALIDATION STRICTE: Vérifie que l'ajout d'un point ne crée pas de crossing avec les segments existants
+ */
+export function validatePointAddition(polygon: ReadonlyArray<{ x: number; y: number }>, newPoint: { x: number; y: number }, insertIndex: number): { valid: boolean; reason?: string } {
+  // Créer le nouveau polygone avec le point ajouté
+  const newPolygon = [
+    ...polygon.slice(0, insertIndex),
+    newPoint,
+    ...polygon.slice(insertIndex)
+  ]
+  
+  // Vérifier l'intégrité
+  const integrityCheck = validatePolygonIntegrity(newPolygon)
+  if (!integrityCheck.valid) {
+    return integrityCheck
+  }
+  
+  // Vérifier que les nouveaux segments ne croisent pas les anciens
+  const prevIndex = (insertIndex - 1 + polygon.length) % polygon.length
+  const nextIndex = insertIndex % polygon.length
+  
+  const newSeg1 = { start: polygon[prevIndex], end: newPoint }
+  const newSeg2 = { start: newPoint, end: polygon[nextIndex] }
+  
+  // Vérifier contre tous les autres segments
+  for (let i = 0; i < polygon.length; i++) {
+    const segStart = polygon[i]
+    const segEnd = polygon[(i + 1) % polygon.length]
+    
+    // Ignorer les segments adjacents au point inséré
+    if (i === prevIndex || i === nextIndex || (i + 1) % polygon.length === insertIndex) {
+      continue
+    }
+    
+    if (checkSegmentIntersection(newSeg1.start, newSeg1.end, segStart, segEnd)) {
+      return { valid: false, reason: 'Le nouveau segment croiserait un segment existant' }
+    }
+    
+    if (checkSegmentIntersection(newSeg2.start, newSeg2.end, segStart, segEnd)) {
+      return { valid: false, reason: 'Le nouveau segment croiserait un segment existant' }
+    }
+  }
+  
+  return { valid: true }
+}
+
+/**
+ * VALIDATION STRICTE: Vérifie qu'on ne peut pas supprimer un point sans invalider la forme
+ */
+export function validatePointRemoval(polygon: ReadonlyArray<{ x: number; y: number }>, removeIndex: number): { valid: boolean; reason?: string } {
+  // Une forme valide doit avoir au minimum 3 points
+  if (polygon.length <= 3) {
+    return { valid: false, reason: 'Une forme doit avoir au minimum 3 points' }
+  }
+  
+  // Créer le polygone sans le point
+  const newPolygon = polygon.filter((_, i) => i !== removeIndex)
+  
+  // Vérifier l'intégrité
+  const integrityCheck = validatePolygonIntegrity(newPolygon)
+  if (!integrityCheck.valid) {
+    return integrityCheck
+  }
+  
   return { valid: true }
 }

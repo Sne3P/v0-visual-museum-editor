@@ -29,6 +29,8 @@ import {
   useCanvasInteraction,
   useCanvasRender
 } from "@/features/canvas/hooks"
+import { useContextMenu } from "@/shared/hooks"
+import { ContextMenu } from "@/shared/components"
 import { v4 as uuidv4 } from "uuid"
 import { ValidationBadge } from "./components/ValidationBadge"
 
@@ -37,13 +39,15 @@ interface CanvasProps {
   updateState: (updates: Partial<EditorState>, saveHistory?: boolean, description?: string) => void
   currentFloor: Floor
   onArtworkDoubleClick?: (artworkId: string) => void
+  onOpenPropertiesModal?: (type: 'room' | 'artwork' | 'wall' | 'door' | 'verticalLink', id: string) => void
 }
 
 export function Canvas({ 
   state, 
   updateState,
   currentFloor,
-  onArtworkDoubleClick 
+  onArtworkDoubleClick,
+  onOpenPropertiesModal
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -129,6 +133,16 @@ export function Canvas({
     screenToWorld: coordinates.screenToWorld
   })
 
+  // Hook du menu contextuel (clic droit)
+  const contextMenu = useContextMenu({
+    state,
+    currentFloor,
+    updateState,
+    detectElementAt: selection.findElementAt,
+    canvasRef,
+    onOpenPropertiesModal
+  })
+
   // Hook d'interaction utilisateur
   const interaction = useCanvasInteraction({
     state,
@@ -140,7 +154,8 @@ export function Canvas({
     freeFormCreation,
     elementDrag,
     vertexEdit,
-    screenToWorld: coordinates.screenToWorld
+    screenToWorld: coordinates.screenToWorld,
+    onContextMenu: contextMenu.openContextMenu
   })
 
   // Hook de rendu
@@ -180,7 +195,7 @@ export function Canvas({
   }, [coordinates.handleWheel])
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-gray-50">
+    <div ref={containerRef} className="relative w-full h-full bg-gray-50" onContextMenu={(e) => e.preventDefault()}>
       {/* Badge de validation */}
       <ValidationBadge 
         state={state} 
@@ -195,11 +210,13 @@ export function Canvas({
         onMouseMove={interaction.handleMouseMove}
         onMouseUp={interaction.handleMouseUp}
         onMouseLeave={interaction.handleMouseLeave}
+        onContextMenu={(e) => e.preventDefault()}
         className="w-full h-full"
         style={{
           cursor: interaction.cursorType === 'grabbing' ? 'grabbing' : 
                   interaction.cursorType === 'grab' ? 'grab' :
-                  interaction.cursorType === 'crosshair' ? 'crosshair' : 'default'
+                  interaction.cursorType === 'crosshair' ? 'crosshair' : 'default',
+          pointerEvents: state.contextMenu ? 'none' : 'auto'
         }}
       />
 
@@ -272,6 +289,17 @@ export function Canvas({
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg shadow-lg animate-pulse">
           Double-clic ou Entrée pour terminer la forme
         </div>
+      )}
+
+      {/* Menu contextuel (clic droit) */}
+      {state.contextMenu && (
+        <ContextMenu
+          x={state.contextMenu.x}
+          y={state.contextMenu.y}
+          actions={contextMenu.actions}
+          onAction={contextMenu.executeAction}
+          onClose={contextMenu.closeContextMenu}
+        />
       )}
     </div>
   )

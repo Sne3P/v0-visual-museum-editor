@@ -6,7 +6,7 @@
 
 import { useCallback, useState, useEffect, type MouseEvent } from "react"
 import type { Point, EditorState, Floor } from "@/core/entities"
-import { smartSnap } from "@/core/services"
+import { smartSnap, updateDuplicatingElementPosition, finalizeDuplication, cancelDuplication } from "@/core/services"
 import { v4 as uuidv4 } from "uuid"
 
 interface CanvasInteractionOptions {
@@ -20,6 +20,7 @@ interface CanvasInteractionOptions {
   elementDrag: any
   vertexEdit: any
   screenToWorld: (x: number, y: number) => Point
+  onContextMenu?: (x: number, y: number, worldPos: Point) => void
 }
 
 export function useCanvasInteraction({
@@ -32,7 +33,8 @@ export function useCanvasInteraction({
   freeFormCreation,
   elementDrag,
   vertexEdit,
-  screenToWorld
+  screenToWorld,
+  onContextMenu
 }: CanvasInteractionOptions) {
   const [isPanning, setIsPanning] = useState(false)
   const [lastPanPos, setLastPanPos] = useState<Point | null>(null)
@@ -54,12 +56,33 @@ export function useCanvasInteraction({
     const worldPos = screenToWorld(e.clientX, e.clientY)
     const snapResult = smartSnap(worldPos, currentFloor)
     
+    // MODE DUPLICATION: Clic gauche pour valider le placement
+    if (e.button === 0 && state.duplicatingElement) {
+      const finalState = finalizeDuplication(state, currentFloor.id)
+      updateState(finalState, true, 'Dupliquer et placer')
+      return
+    }
+    
     // Pan avec molette centrale
     if (e.button === 1) {
       e.preventDefault()
       setIsPanning(true)
       setLastPanPos({ x: e.clientX, y: e.clientY })
       setCursorType('grabbing')
+      return
+    }
+    
+    // Clic droit → Menu contextuel
+    if (e.button === 2) {
+      e.preventDefault()
+      // Si en mode duplication, annuler d'abord
+      if (state.duplicatingElement) {
+        updateState(cancelDuplication(state, currentFloor.id), false)
+        return
+      }
+      if (onContextMenu) {
+        onContextMenu(e.clientX, e.clientY, worldPos)
+      }
       return
     }
     
@@ -149,6 +172,16 @@ export function useCanvasInteraction({
   const handleMouseMove = useCallback((e: MouseEvent<HTMLCanvasElement>) => {
     const worldPos = screenToWorld(e.clientX, e.clientY)
     const snapResult = smartSnap(worldPos, currentFloor)
+    
+    // MODE DUPLICATION: Mettre à jour la position en temps réel
+    if (state.duplicatingElement) {
+      const snappedPos = snapResult.point
+      const newState = updateDuplicatingElementPosition(state, currentFloor.id, snappedPos)
+      updateState(newState, false)
+      setHoveredPoint(snappedPos)
+      setCursorType('default')
+      return
+    }
     
     // Pan en cours
     if (isPanning && lastPanPos) {

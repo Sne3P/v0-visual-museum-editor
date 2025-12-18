@@ -1,2 +1,5 @@
-// Placeholder pour composants partagés futurs
-export {}
+export * from './HistoryButtons'
+export * from './ContextMenu'
+export * from './PropertiesModal'
+
+

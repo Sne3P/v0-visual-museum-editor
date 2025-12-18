@@ -28,6 +28,7 @@ export type {
   SelectedElement,
   DragInfo,
   HoverInfo,
+  ContextMenuAction,
   ContextMenuState,
   MeasurementDisplay,
   MeasurementState,

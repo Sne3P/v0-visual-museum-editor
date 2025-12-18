@@ -23,5 +23,8 @@ export * from './feedback.constants'
 // Historique
 export * from './history.constants'
 
+// Menu contextuel
+export * from './contextMenu.constants'
+
 // Divers
 export * from './misc.constants'

@@ -13,25 +13,34 @@ export const HISTORY_CONFIG = {
   /**
    * Intervalle minimum entre deux entrées d'historique (ms)
    * Évite de saturer l'historique avec des modifications trop rapprochées
+   * 500ms = actions espacées de plus d'une demi-seconde sont séparées
    */
-  MIN_INTERVAL: 100,
+  MIN_INTERVAL: 500,
 
   /**
    * Actions qui doivent toujours créer une nouvelle entrée (pas de merge)
+   * Toutes les créations, suppressions, et actions structurelles
    */
   ALWAYS_NEW_ENTRY: [
     'Create room',
     'Create wall',
     'Create door',
     'Create artwork',
-    'Create vertical link',
+    'Create stairs',
+    'Create elevator',
     'Delete room',
     'Delete wall',
     'Delete door',
     'Delete artwork',
     'Delete vertical link',
+    'Delete elements',
     'Add floor',
     'Delete floor',
+    'Paste',
+    'Duplicate',
+    'Dupliquer et placer',
+    'Edit vertex',
+    'Edit segment',
   ],
 } as const
 
