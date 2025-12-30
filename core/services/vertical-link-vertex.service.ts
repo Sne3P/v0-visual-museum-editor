@@ -101,5 +101,22 @@ export function validateVerticalLinkCornerMove(
     }
   }
 
+  // Vérifier chevauchement avec autres vertical links
+  const { validateVerticalLinkCreation } = require('./vertical-link.service')
+  const validation = validateVerticalLinkCreation(
+    updatedLink.position,
+    updatedLink.size,
+    updatedLink.type, // IMPORTANT: type est maintenant le 3e paramètre
+    floor,
+    link.id // Exclure le link en cours d'édition
+  )
+  
+  if (!validation.valid) {
+    return {
+      valid: false,
+      message: validation.message ?? 'Position invalide'
+    }
+  }
+
   return { valid: true }
 }

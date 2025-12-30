@@ -64,6 +64,8 @@ export function Canvas({
     mode: 'create' | 'edit'
     linkId?: string
     currentFloorIds?: string[]
+    currentLinkGroupId?: string
+    currentLinkNumber?: number
   } | null>(null)
   
   // Hook coordonnées & zoom
@@ -211,7 +213,9 @@ export function Canvas({
       type: link.type,
       mode: 'edit',
       linkId: link.id,
-      currentFloorIds: [...link.connectedFloorIds]
+      currentFloorIds: [...link.connectedFloorIds],
+      currentLinkGroupId: link.linkGroupId,
+      currentLinkNumber: link.linkNumber
     })
   }, [currentFloor])
 
@@ -229,10 +233,21 @@ export function Canvas({
   /**
    * Gestion de la confirmation du modal de sélection d'étages
    */
-  const handleVerticalLinkModalConfirm = (selectedFloorIds: string[], createAbove: boolean, createBelow: boolean) => {
+  const handleVerticalLinkModalConfirm = (
+    selectedFloorIds: string[], 
+    createAbove: boolean, 
+    createBelow: boolean,
+    groupInfo?: { linkGroupId?: string; linkNumber?: number; isNewGroup: boolean }
+  ) => {
     if (!verticalLinkModal) return
 
     const { position, size, type, mode, linkId } = verticalLinkModal
+
+    // Générer groupe info si pas fourni
+    const { createNewLinkGroup } = require('@/core/services/vertical-link-group.service')
+    const finalGroupInfo = groupInfo?.isNewGroup === false && groupInfo.linkGroupId
+      ? groupInfo
+      : createNewLinkGroup({ type } as any, state.floors)
 
     // MODE ÉDITION : Mettre à jour les étages connectés
     if (mode === 'edit' && linkId) {
@@ -240,7 +255,12 @@ export function Canvas({
         ...floor,
         verticalLinks: floor.verticalLinks.map(link =>
           link.id === linkId
-            ? { ...link, connectedFloorIds: selectedFloorIds as readonly string[] }
+            ? { 
+                ...link, 
+                connectedFloorIds: selectedFloorIds as readonly string[],
+                linkGroupId: finalGroupInfo.linkGroupId,
+                linkNumber: finalGroupInfo.linkNumber
+              }
             : link
         )
       }))
@@ -313,7 +333,9 @@ export function Canvas({
       size,
       floorId: currentFloor.id,  // IMPORTANT: lien physique sur cet étage uniquement
       connectedFloorIds: finalSelectedFloorIds,
-      roomId: room?.id
+      roomId: room?.id,
+      linkGroupId: finalGroupInfo.linkGroupId,
+      linkNumber: finalGroupInfo.linkNumber
     }
 
     // Ajouter le lien UNIQUEMENT à l'étage courant (pas de duplication visuelle)
@@ -543,6 +565,8 @@ export function Canvas({
           linkType={verticalLinkModal.type}
           mode={verticalLinkModal.mode}
           currentConnectedFloorIds={verticalLinkModal.currentFloorIds}
+          currentLinkGroupId={verticalLinkModal.currentLinkGroupId}
+          currentLinkNumber={verticalLinkModal.currentLinkNumber}
           onConfirm={handleVerticalLinkModalConfirm}
           onCancel={() => setVerticalLinkModal(null)}
         />

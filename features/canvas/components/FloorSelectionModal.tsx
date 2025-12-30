@@ -1,10 +1,12 @@
 /**
  * Modal de sélection d'étages pour liens verticaux
  * Permet de sélectionner plusieurs étages à connecter
+ * Étape 2 : Sélection du groupe de liaison (nouveau ou existant)
  */
 
 import { useState, useMemo } from 'react'
 import type { Floor } from '@/core/entities'
+import { VerticalLinkGroupSelector } from './VerticalLinkGroupSelector'
 
 interface FloorSelectionModalProps {
   floors: readonly Floor[]
@@ -12,7 +14,14 @@ interface FloorSelectionModalProps {
   linkType: 'stairs' | 'elevator'
   mode?: 'create' | 'edit'
   currentConnectedFloorIds?: string[]
-  onConfirm: (selectedFloorIds: string[], createAbove: boolean, createBelow: boolean) => void
+  currentLinkGroupId?: string
+  currentLinkNumber?: number
+  onConfirm: (
+    selectedFloorIds: string[], 
+    createAbove: boolean, 
+    createBelow: boolean,
+    groupInfo?: { linkGroupId?: string; linkNumber?: number; isNewGroup: boolean }
+  ) => void
   onCancel: () => void
 }
 
@@ -22,9 +31,14 @@ export function FloorSelectionModal({
   linkType,
   mode = 'create',
   currentConnectedFloorIds,
+  currentLinkGroupId,
+  currentLinkNumber,
   onConfirm,
   onCancel
 }: FloorSelectionModalProps) {
+  
+  // État : étape du modal (1 = sélection étages, 2 = sélection groupe)
+  const [step, setStep] = useState<1 | 2>(1)
   
   // Trouve l'index de l'étage actuel
   const currentFloorIndex = useMemo(() => 
@@ -33,8 +47,6 @@ export function FloorSelectionModal({
   )
 
   // État : étages sélectionnés
-  // En mode édition, commence avec les étages déjà connectés
-  // En mode création, commence avec l'étage actuel
   const [selectedFloorIds, setSelectedFloorIds] = useState<Set<string>>(() => {
     if (mode === 'edit' && currentConnectedFloorIds) {
       return new Set(currentConnectedFloorIds)
@@ -66,16 +78,42 @@ export function FloorSelectionModal({
   }
 
   /**
-   * Valide et ferme
+   * Passer à l'étape 2 (sélection groupe)
    */
-  const handleConfirm = () => {
-    // Au moins 2 étages requis (ou 1 + création)
+  const handleNextStep = () => {
     const totalCount = selectedFloorIds.size + (createAbove ? 1 : 0) + (createBelow ? 1 : 0)
-    if (totalCount < 2) {
-      return
-    }
+    if (totalCount < 2) return
     
-    onConfirm(Array.from(selectedFloorIds), createAbove, createBelow)
+    setStep(2)
+  }
+
+  /**
+   * Retour étape 1
+   */
+  const handleBackStep = () => {
+    setStep(1)
+  }
+
+  /**
+   * Valide avec info groupe
+   */
+  const handleGroupSelect = (groupInfo: { linkGroupId?: string; linkNumber?: number; isNewGroup: boolean }) => {
+    onConfirm(Array.from(selectedFloorIds), createAbove, createBelow, groupInfo)
+  }
+
+  // Si étape 2, afficher le sélecteur de groupe
+  if (step === 2) {
+    return (
+      <VerticalLinkGroupSelector
+        type={linkType}
+        connectedFloorIds={Array.from(selectedFloorIds)}
+        floors={floors}
+        currentLinkGroupId={currentLinkGroupId}
+        currentLinkNumber={currentLinkNumber}
+        onSelect={handleGroupSelect}
+        onCancel={handleBackStep}
+      />
+    )
   }
 
   const totalSelected = selectedFloorIds.size + (createAbove ? 1 : 0) + (createBelow ? 1 : 0)
@@ -234,7 +272,7 @@ export function FloorSelectionModal({
             Annuler
           </button>
           <button
-            onClick={handleConfirm}
+            onClick={handleNextStep}
             disabled={totalSelected < 2}
             className={`
               flex-1 px-4 py-2 rounded-lg font-medium transition-colors
@@ -244,7 +282,7 @@ export function FloorSelectionModal({
               }
             `}
           >
-            Créer
+            Suivant →
           </button>
         </div>
       </div>

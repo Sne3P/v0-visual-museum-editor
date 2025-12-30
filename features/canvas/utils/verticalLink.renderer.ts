@@ -67,7 +67,8 @@ export function drawVerticalLink(
     isHovered,
     isInvalid,
     zoom,
-    link.connectedFloorIds.length
+    link.connectedFloorIds.length,
+    link.linkNumber
   )
 }
 
@@ -83,7 +84,8 @@ function drawLinkRectangle(
   isHovered: boolean,
   isInvalid: boolean,
   zoom: number,
-  connectedFloorsCount: number
+  connectedFloorsCount: number,
+  linkNumber?: number
 ) {
   // Overlay rouge si invalide
   if (isInvalid) {
@@ -121,8 +123,13 @@ function drawLinkRectangle(
   ctx.textBaseline = 'middle'
   ctx.fillText(isStairs ? '↕' : '⬍', centerX, centerY)
   
-  // Afficher le nombre d'étages connectés
-  if (connectedFloorsCount > 1) {
+  // Afficher le numéro du lien (Escalier 1, Ascenseur 2, etc.)
+  if (linkNumber !== undefined) {
+    const label = isStairs ? `Escalier ${linkNumber}` : `Ascenseur ${linkNumber}`
+    ctx.font = `bold ${14 * zoom}px Arial`
+    ctx.fillText(label, centerX, centerY + 22 * zoom)
+  } else if (connectedFloorsCount > 1) {
+    // Fallback: afficher le nombre d'étages si pas de numéro
     ctx.font = `${12 * zoom}px Arial`
     ctx.fillText(`${connectedFloorsCount} étages`, centerX, centerY + 20 * zoom)
   }

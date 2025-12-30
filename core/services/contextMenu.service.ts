@@ -19,11 +19,12 @@ let clipboard: { element: SelectedElement; data: any } | null = null
 // ============================================================
 
 /**
- * Supprimer un élément simple (room, artwork, door, wall)
+ * Supprimer un élément simple (room, artwork, door, wall, verticalLink)
+ * Pour verticalLink: suppression en cascade sur tous les étages du même groupe
  */
 function deleteSimpleElement(
   floor: any,
-  type: 'rooms' | 'artworks' | 'doors' | 'walls',
+  type: 'rooms' | 'artworks' | 'doors' | 'walls' | 'verticalLinks',
   id: string
 ): any {
   return {
@@ -182,12 +183,13 @@ export function executeSupprimer(
         updatedFloor = deleteRoomWithChildren(updatedFloor, selected.id)
         successCount++
       }
-      // Éléments simples (artwork, door, wall)
-      else if (['artwork', 'door', 'wall'].includes(selected.type)) {
-        const typeMap: Record<string, 'artworks' | 'doors' | 'walls'> = {
+      // Éléments simples (artwork, door, wall, verticalLink)
+      else if (['artwork', 'door', 'wall', 'verticalLink'].includes(selected.type)) {
+        const typeMap: Record<string, 'artworks' | 'doors' | 'walls' | 'verticalLinks'> = {
           artwork: 'artworks',
           door: 'doors',
-          wall: 'walls'
+          wall: 'walls',
+          verticalLink: 'verticalLinks'
         }
         updatedFloor = deleteSimpleElement(updatedFloor, typeMap[selected.type], selected.id)
         successCount++

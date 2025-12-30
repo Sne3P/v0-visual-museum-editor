@@ -48,6 +48,8 @@ export interface VerticalLink {
   readonly size: readonly [number, number]  // [largeur, hauteur] pour le rectangle
   readonly connectedFloorIds: readonly string[]  // Liste des étages connectés (liens techniques)
   readonly roomId?: string  // Room parent (contrainte: doit rester dans cette room)
+  readonly linkGroupId?: string  // ID commun pour tous les segments du même escalier/ascenseur
+  readonly linkNumber?: number  // Numéro d'escalier/ascenseur (escalier 1, 2, etc.)
 }
 
 // ==================== ESCALATOR ====================
