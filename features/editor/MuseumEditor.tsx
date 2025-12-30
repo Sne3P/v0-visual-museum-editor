@@ -14,7 +14,7 @@ import { PropertiesModal } from "@/shared/components/PropertiesModal"
 import { useHistory, useKeyboardShortcuts } from "@/shared/hooks"
 import type { EditorState, Tool, Floor, Artwork, MeasurementState, SelectedElement } from "@/core/entities"
 import { HISTORY_ACTIONS } from "@/core"
-import { executeSupprimer, executeCopier, executeColler } from "@/core/services"
+import { executeSupprimer, executeCopier, executeColler, removeFloorFromVerticalLinks } from "@/core/services"
 import { v4 as uuidv4 } from "uuid"
 
 export function MuseumEditor() {
@@ -261,7 +261,14 @@ export function MuseumEditor() {
   const handleDeleteFloor = useCallback((floorId: string) => {
     if (state.floors.length <= 1) return
 
-    const updatedFloors = state.floors.filter(f => f.id !== floorId)
+    // Supprimer l'étage et mettre à jour les liens verticaux de tous les autres étages
+    const updatedFloors = state.floors
+      .filter(f => f.id !== floorId)
+      .map(floor => ({
+        ...floor,
+        verticalLinks: removeFloorFromVerticalLinks(floorId, floor.verticalLinks)
+      }))
+    
     const newCurrentFloorId = floorId === state.currentFloorId 
       ? updatedFloors[0].id 
       : state.currentFloorId

@@ -14,8 +14,8 @@
  * - useCanvasRender : Logique de rendu
  */
 
-import { useRef, useEffect } from "react"
-import type { EditorState, Floor } from "@/core/entities"
+import { useRef, useEffect, useState, useCallback } from "react"
+import type { EditorState, Floor, Point } from "@/core/entities"
 import { 
   useCanvasCoordinates,
   useCanvasSelection,
@@ -24,8 +24,10 @@ import {
   useFreeFormCreation,
   useWallCreation,
   useDoorCreation,
+  useVerticalLinkCreation,
   useElementDrag,
   useVertexEdit,
+  useVerticalLinkEdit,
   useWallEndpointEdit,
   useCanvasInteraction,
   useCanvasRender
@@ -33,7 +35,8 @@ import {
 import { useContextMenu } from "@/shared/hooks"
 import { ContextMenu } from "@/shared/components"
 import { v4 as uuidv4 } from "uuid"
-import { ValidationBadge } from "./components/ValidationBadge"
+import { FloorSelectionModal } from "./components/FloorSelectionModal"
+import { findRoomForVerticalLink } from "@/core/services"
 
 interface CanvasProps {
   state: EditorState
@@ -52,6 +55,16 @@ export function Canvas({
 }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  
+  // État du modal de sélection d'étages
+  const [verticalLinkModal, setVerticalLinkModal] = useState<{
+    position: Point
+    size: readonly [number, number]
+    type: 'stairs' | 'elevator'
+    mode: 'create' | 'edit'
+    linkId?: string
+    currentFloorIds?: string[]
+  } | null>(null)
   
   // Hook coordonnées & zoom
   const coordinates = useCanvasCoordinates({
@@ -146,6 +159,15 @@ export function Canvas({
     }
   })
 
+  // Hook de création de liens verticaux (escaliers/ascenseurs)
+  const verticalLinkCreation = useVerticalLinkCreation({
+    currentFloor,
+    onComplete: (position, size, type) => {
+      // Ouvrir le modal de sélection d'étages
+      setVerticalLinkModal({ position, size, type, mode: 'create' })
+    }
+  })
+
   // Hook de déplacement d'éléments (Phase 2)
   const elementDrag = useElementDrag({
     state,
@@ -162,6 +184,14 @@ export function Canvas({
     screenToWorld: coordinates.screenToWorld
   })
 
+  // Hook d'édition vertices vertical links
+  const verticalLinkEdit = useVerticalLinkEdit({
+    state,
+    currentFloor,
+    updateState,
+    screenToWorld: coordinates.screenToWorld
+  })
+
   // Hook d'édition endpoints murs
   const wallEndpointEdit = useWallEndpointEdit({
     state,
@@ -170,6 +200,21 @@ export function Canvas({
     screenToWorld: coordinates.screenToWorld
   })
 
+  // Callback pour ouvrir le modal d'édition d'étages
+  const handleEditVerticalLinkFloors = useCallback((linkId: string) => {
+    const link = currentFloor.verticalLinks.find(l => l.id === linkId)
+    if (!link) return
+
+    setVerticalLinkModal({
+      position: link.position,
+      size: link.size,
+      type: link.type,
+      mode: 'edit',
+      linkId: link.id,
+      currentFloorIds: [...link.connectedFloorIds]
+    })
+  }, [currentFloor])
+
   // Hook du menu contextuel (clic droit)
   const contextMenu = useContextMenu({
     state,
@@ -177,8 +222,112 @@ export function Canvas({
     updateState,
     detectElementAt: selection.findElementAt,
     canvasRef,
-    onOpenPropertiesModal
+    onOpenPropertiesModal,
+    onEditVerticalLinkFloors: handleEditVerticalLinkFloors
   })
+
+  /**
+   * Gestion de la confirmation du modal de sélection d'étages
+   */
+  const handleVerticalLinkModalConfirm = (selectedFloorIds: string[], createAbove: boolean, createBelow: boolean) => {
+    if (!verticalLinkModal) return
+
+    const { position, size, type, mode, linkId } = verticalLinkModal
+
+    // MODE ÉDITION : Mettre à jour les étages connectés
+    if (mode === 'edit' && linkId) {
+      const updatedFloors = state.floors.map(floor => ({
+        ...floor,
+        verticalLinks: floor.verticalLinks.map(link =>
+          link.id === linkId
+            ? { ...link, connectedFloorIds: selectedFloorIds as readonly string[] }
+            : link
+        )
+      }))
+
+      updateState({ floors: updatedFloors }, true, 'Modifier étages connectés')
+      setVerticalLinkModal(null)
+      return
+    }
+
+    // MODE CRÉATION
+
+    // Trouver la room parent
+    const room = findRoomForVerticalLink(
+      { 
+        id: 'temp', 
+        type, 
+        position, 
+        size, 
+        floorId: currentFloor.id,
+        connectedFloorIds: [] 
+      },
+      currentFloor
+    )
+
+    let updatedFloors = [...state.floors]
+    let finalSelectedFloorIds = [...selectedFloorIds]
+
+    // Créer nouvel étage au-dessus si demandé
+    if (createAbove) {
+      const newFloorId = uuidv4()
+      const topFloorIndex = updatedFloors.length - 1
+      const newFloor = {
+        id: newFloorId,
+        name: `Étage ${updatedFloors.length + 1}`,
+        rooms: [],
+        doors: [],
+        walls: [],
+        artworks: [],
+        verticalLinks: [],
+        escalators: [],
+        elevators: []
+      }
+      updatedFloors.push(newFloor)
+      finalSelectedFloorIds.push(newFloorId)
+    }
+
+    // Créer nouvel étage en-dessous si demandé
+    if (createBelow) {
+      const newFloorId = uuidv4()
+      const newFloor = {
+        id: newFloorId,
+        name: `Sous-sol ${updatedFloors.filter(f => f.name.startsWith('Sous-sol')).length + 1}`,
+        rooms: [],
+        doors: [],
+        walls: [],
+        artworks: [],
+        verticalLinks: [],
+        escalators: [],
+        elevators: []
+      }
+      updatedFloors.unshift(newFloor)
+      finalSelectedFloorIds.push(newFloorId)
+    }
+
+    // Créer le nouveau lien vertical (UNIQUEMENT sur l'étage courant)
+    const newVerticalLink = {
+      id: uuidv4(),
+      type,
+      position,
+      size,
+      floorId: currentFloor.id,  // IMPORTANT: lien physique sur cet étage uniquement
+      connectedFloorIds: finalSelectedFloorIds,
+      roomId: room?.id
+    }
+
+    // Ajouter le lien UNIQUEMENT à l'étage courant (pas de duplication visuelle)
+    updatedFloors = updatedFloors.map(floor =>
+      floor.id === currentFloor.id
+        ? { ...floor, verticalLinks: [...floor.verticalLinks, newVerticalLink] }
+        : floor
+    )
+
+    updateState({ floors: updatedFloors }, true, `Créer ${type === 'stairs' ? 'escalier' : 'ascenseur'}`)
+    
+    // Fermer le modal
+    setVerticalLinkModal(null)
+  }
 
   // Hook d'interaction utilisateur
   const interaction = useCanvasInteraction({
@@ -191,8 +340,10 @@ export function Canvas({
     freeFormCreation,
     wallCreation,
     doorCreation,
+    verticalLinkCreation,
     elementDrag,
     vertexEdit,
+    verticalLinkEdit,
     wallEndpointEdit,
     screenToWorld: coordinates.screenToWorld,
     onContextMenu: contextMenu.openContextMenu
@@ -208,9 +359,11 @@ export function Canvas({
     freeFormCreation,
     wallCreation,
     doorCreation,
+    verticalLinkCreation,
     boxSelection,
     elementDrag,
     vertexEdit,
+    verticalLinkEdit,
     wallEndpointEdit,
     hoveredPoint: interaction.hoveredPoint,
     hoverInfo: interaction.hoverInfo
@@ -237,15 +390,20 @@ export function Canvas({
     }
   }, [coordinates.handleWheel])
 
+  // Gestion clavier pour vertical link (Échap pour annuler)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (verticalLinkCreation.state.isCreating && e.key === 'Escape') {
+        verticalLinkCreation.cancelCreation()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [verticalLinkCreation])
+
   return (
     <div ref={containerRef} className="relative w-full h-full bg-gray-50" onContextMenu={(e) => e.preventDefault()}>
-      {/* Badge de validation */}
-      <ValidationBadge 
-        state={state} 
-        currentFloor={currentFloor}
-        className="absolute top-4 left-4 z-10"
-      />
-
       {/* Canvas */}
       <canvas
         ref={canvasRef}
@@ -334,13 +492,35 @@ export function Canvas({
         </div>
       )}
 
-      {/* Validation inline pour mur en cours de création (comme formes) */}
-      {wallCreation.state.isCreating && wallCreation.state.validation && (
+      {/* Validation inline pour mur en cours de création */}
+      {wallCreation.state.isCreating && wallCreation.state.validation && !wallCreation.state.validation.valid && (
         <div className={`absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 text-white text-sm font-medium rounded-lg shadow-lg z-50 ${
-          wallCreation.state.validation.valid ? 'bg-green-500' : 
           wallCreation.state.validation.severity === 'warning' ? 'bg-orange-500' : 'bg-red-500'
         }`}>
           {wallCreation.state.validation.message}
+        </div>
+      )}
+
+      {/* Validation inline pour lien vertical en cours de création */}
+      {verticalLinkCreation.state.isCreating && verticalLinkCreation.state.validationMessage && !verticalLinkCreation.state.isValid && (
+        <div className={`absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 text-white text-sm font-medium rounded-lg shadow-lg z-50 ${
+          verticalLinkCreation.state.validationSeverity === 'warning' ? 'bg-orange-500' : 'bg-red-500'
+        }`}>
+          {verticalLinkCreation.state.validationMessage}
+        </div>
+      )}
+
+      {/* Validation inline pour drag de vertical link */}
+      {elementDrag.dragState.isDragging && elementDrag.dragState.draggedElements.some(el => el.type === 'verticalLink') && !elementDrag.dragState.isValid && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg shadow-lg z-50">
+          {elementDrag.dragState.validationMessage || 'Déplacement invalide'}
+        </div>
+      )}
+
+      {/* Validation inline pour édition vertex vertical link */}
+      {verticalLinkEdit.editState.isEditing && !verticalLinkEdit.editState.isValid && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-lg shadow-lg z-50">
+          {verticalLinkEdit.editState.validationMessage || 'Modification invalide'}
         </div>
       )}
 
@@ -352,6 +532,19 @@ export function Canvas({
           actions={contextMenu.actions}
           onAction={contextMenu.executeAction}
           onClose={contextMenu.closeContextMenu}
+        />
+      )}
+
+      {/* Modal de sélection d'étages pour liens verticaux */}
+      {verticalLinkModal && (
+        <FloorSelectionModal
+          floors={state.floors}
+          currentFloorId={currentFloor.id}
+          linkType={verticalLinkModal.type}
+          mode={verticalLinkModal.mode}
+          currentConnectedFloorIds={verticalLinkModal.currentFloorIds}
+          onConfirm={handleVerticalLinkModalConfirm}
+          onCancel={() => setVerticalLinkModal(null)}
         />
       )}
     </div>

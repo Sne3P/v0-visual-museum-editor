@@ -16,6 +16,7 @@ import {
   drawSharedWalls,
   drawDoorCreationGuides,
   drawVerticalLink,
+  drawVerticalLinkPreview,
   drawShapePreview,
   drawSnapPoint,
   drawValidationMessage,
@@ -26,6 +27,7 @@ import {
   drawMeasurement,
   drawAreaMeasurement
 } from "@/features/canvas/utils"
+import { drawVerticalLinkVertices } from "@/features/canvas/utils/vertical-link-vertex.renderer"
 import { validateWallPlacement } from "@/core/services"
 import { worldToCanvas } from "@/core/utils"
 import { GRID_SIZE } from "@/core/constants"
@@ -39,9 +41,11 @@ interface CanvasRenderOptions {
   freeFormCreation: any
   wallCreation: any
   doorCreation: any
+  verticalLinkCreation: any
   boxSelection: any
   elementDrag: any
   vertexEdit: any
+  verticalLinkEdit: any
   wallEndpointEdit: any
   hoveredPoint: Point | null
   hoverInfo: HoverInfo | null
@@ -56,9 +60,11 @@ export function useCanvasRender({
   freeFormCreation,
   doorCreation,
   wallCreation,
+  verticalLinkCreation,
   boxSelection,
   elementDrag,
   vertexEdit,
+  verticalLinkEdit,
   wallEndpointEdit,
   hoveredPoint,
   hoverInfo
@@ -82,7 +88,7 @@ export function useCanvasRender({
     drawGrid(ctx, width, height, state.zoom, state.pan)
 
     // 2. Éléments du floor
-    renderFloorElements(ctx, currentFloor, state, selection)
+    renderFloorElements(ctx, currentFloor, state, selection, hoverInfo, elementDrag, verticalLinkEdit)
 
     // 2.5. Mesures (si activées)
     if (state.measurements.showMeasurements) {
@@ -103,7 +109,7 @@ export function useCanvasRender({
     }
 
     // 4. Prévisualisations de création
-    renderCreationPreviews(ctx, canvas, state, shapeCreation, freeFormCreation, wallCreation, doorCreation)
+    renderCreationPreviews(ctx, canvas, state, shapeCreation, freeFormCreation, wallCreation, doorCreation, verticalLinkCreation)
 
     // 5. Box selection
     renderBoxSelection(ctx, boxSelection, state)
@@ -159,7 +165,10 @@ function renderFloorElements(
   ctx: CanvasRenderingContext2D,
   currentFloor: Floor,
   state: EditorState,
-  selection: any
+  selection: any,
+  hoverInfo: any,
+  elementDrag: any,
+  verticalLinkEdit: any
 ) {
   currentFloor.rooms.forEach(room => {
     const isSelected = selection.isSelected('room', room.id)
@@ -208,7 +217,16 @@ function renderFloorElements(
 
   currentFloor.verticalLinks?.forEach(link => {
     const isSelected = selection.isSelected('verticalLink', link.id)
-    drawVerticalLink(ctx, link, state.zoom, state.pan, GRID_SIZE, isSelected, false, false)
+    const isHovered = hoverInfo?.type === 'verticalLink' && hoverInfo?.id === link.id
+    
+    // Vérifier si c'est en cours de drag invalide ou édition invalide
+    const isDragging = elementDrag.dragState.isDragging && 
+                       elementDrag.dragState.draggedElements.some(el => el.type === 'verticalLink' && el.id === link.id)
+    const isResizing = verticalLinkEdit.editState.isResizing && verticalLinkEdit.editState.linkId === link.id
+    const isInvalid = (isDragging && !elementDrag.dragState.isValid) || 
+                      (isResizing && !verticalLinkEdit.editState.isValid)
+    
+    drawVerticalLink(ctx, link, state.zoom, state.pan, GRID_SIZE, isSelected, isHovered, isInvalid, currentFloor.id)
   })
 }
 
@@ -222,7 +240,8 @@ function renderCreationPreviews(
   shapeCreation: any,
   freeFormCreation: any,
   wallCreation?: any,
-  doorCreation?: any
+  doorCreation?: any,
+  verticalLinkCreation?: any
 ) {
   // Preview formes géométriques (drag)
   if (shapeCreation.state.previewPolygon) {
@@ -355,6 +374,29 @@ function renderCreationPreviews(
       }
     }
   }
+
+  // Preview lien vertical (escalier/ascenseur)
+  if (verticalLinkCreation && verticalLinkCreation.state.isCreating) {
+    drawVerticalLinkPreview(
+      ctx,
+      verticalLinkCreation.state.startPoint,
+      verticalLinkCreation.state.currentPoint,
+      verticalLinkCreation.state.type || 'stairs',
+      state.zoom,
+      state.pan,
+      verticalLinkCreation.state.isValid
+    )
+
+    // Message de validation
+    if (verticalLinkCreation.state.validationMessage && !verticalLinkCreation.state.isValid) {
+      drawValidationMessage(
+        ctx,
+        verticalLinkCreation.state.validationMessage,
+        verticalLinkCreation.state.validationSeverity || 'error',
+        { x: canvas.width / 2, y: 50 }
+      )
+    }
+  }
 }
 
 /**
@@ -398,6 +440,15 @@ function renderVerticesAndSegments(
   currentFloor.walls?.forEach(wall => {
     drawWallVertices(ctx, wall, state.pan, state.zoom, hoverInfo, state.selectedElements)
   })
+  
+  // VERTICES DES VERTICAL LINKS (rectangles éditables)
+  if (currentFloor.verticalLinks) {
+    currentFloor.verticalLinks.forEach(link => {
+      if (link.floorId === currentFloor.id) {
+        drawVerticalLinkVertices(ctx, link, state.pan, state.zoom, hoverInfo, state.selectedElements)
+      }
+    })
+  }
 }
 
 /**

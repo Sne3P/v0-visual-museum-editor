@@ -1,5 +1,6 @@
 /**
  * RENDU DES LIENS VERTICAUX (Escaliers et Ascenseurs)
+ * Représentation simple par rectangle (pas de duplication dans autres étages)
  */
 
 import type { VerticalLink, Point } from '@/core/entities'
@@ -14,11 +15,14 @@ export function drawVerticalLink(
   gridSize: number = 40,
   isSelected: boolean = false,
   isHovered: boolean = false,
-  isInvalid: boolean = false
+  isInvalid: boolean = false,
+  currentFloorId?: string
 ) {
-  const start = worldToCanvas({ x: link.segment[0].x * gridSize, y: link.segment[0].y * gridSize }, zoom, pan)
-  const end = worldToCanvas({ x: link.segment[1].x * gridSize, y: link.segment[1].y * gridSize }, zoom, pan)
-
+  // Ne pas afficher les liens d'autres étages
+  if (currentFloorId && link.floorId !== currentFloorId) {
+    return
+  }
+  
   const isStairs = link.type === "stairs"
   
   const strokeColor = isInvalid
@@ -29,111 +33,111 @@ export function drawVerticalLink(
     ? (isStairs ? COLORS.stairsHovered : COLORS.elevatorHovered)
     : (isStairs ? COLORS.stairsDefault : COLORS.elevatorDefault)
 
-  // Ligne principale
-  ctx.beginPath()
-  ctx.moveTo(start.x, start.y)
-  ctx.lineTo(end.x, end.y)
-  ctx.strokeStyle = strokeColor
-  ctx.lineWidth = (isSelected ? 8 : isHovered ? 6 : 4) * zoom
-  ctx.lineCap = "round"
-  ctx.stroke()
+  // Calculer les coins du rectangle
+  const halfWidth = link.size[0] / 2
+  const halfHeight = link.size[1] / 2
+  
+  const topLeft = worldToCanvas(
+    { x: link.position.x - halfWidth, y: link.position.y - halfHeight },
+    zoom,
+    pan
+  )
+  const topRight = worldToCanvas(
+    { x: link.position.x + halfWidth, y: link.position.y - halfHeight },
+    zoom,
+    pan
+  )
+  const bottomRight = worldToCanvas(
+    { x: link.position.x + halfWidth, y: link.position.y + halfHeight },
+    zoom,
+    pan
+  )
+  const bottomLeft = worldToCanvas(
+    { x: link.position.x - halfWidth, y: link.position.y + halfHeight },
+    zoom,
+    pan
+  )
 
-  // Ligne décorative blanche
-  ctx.beginPath()
-  ctx.moveTo(start.x, start.y)
-  ctx.lineTo(end.x, end.y)
-  ctx.strokeStyle = "white"
-  ctx.lineWidth = (isSelected ? 4 : isHovered ? 3 : 2) * zoom
-  ctx.lineCap = "round"
-  ctx.stroke()
+  drawLinkRectangle(
+    ctx,
+    [topLeft, topRight, bottomRight, bottomLeft],
+    strokeColor,
+    isStairs,
+    isSelected,
+    isHovered,
+    isInvalid,
+    zoom,
+    link.connectedFloorIds.length
+  )
+}
 
-  // Pattern pour escaliers
-  if (isStairs) {
-    const segmentLength = Math.hypot(end.x - start.x, end.y - start.y)
-    const steps = Math.max(2, Math.floor(segmentLength / (30 * zoom)))
-    
-    ctx.strokeStyle = strokeColor
-    ctx.lineWidth = 1 * zoom
-    
-    for (let i = 1; i < steps; i++) {
-      const t = i / steps
-      const x = start.x + (end.x - start.x) * t
-      const y = start.y + (end.y - start.y) * t
-      
-      const angle = Math.atan2(end.y - start.y, end.x - start.x) + Math.PI / 2
-      const stepSize = 3 * zoom
-      
-      ctx.beginPath()
-      ctx.moveTo(x - Math.cos(angle) * stepSize, y - Math.sin(angle) * stepSize)
-      ctx.lineTo(x + Math.cos(angle) * stepSize, y + Math.sin(angle) * stepSize)
-      ctx.stroke()
-    }
+/**
+ * Dessine un lien vertical (rectangle)
+ */
+function drawLinkRectangle(
+  ctx: CanvasRenderingContext2D,
+  corners: Point[],
+  strokeColor: string,
+  isStairs: boolean,
+  isSelected: boolean,
+  isHovered: boolean,
+  isInvalid: boolean,
+  zoom: number,
+  connectedFloorsCount: number
+) {
+  // Overlay rouge si invalide
+  if (isInvalid) {
+    ctx.beginPath()
+    ctx.rect(corners[0].x, corners[0].y, corners[1].x - corners[0].x, corners[2].y - corners[0].y)
+    ctx.fillStyle = '#fecaca'
+    ctx.fill()
+    ctx.strokeStyle = '#ef4444'
+    ctx.lineWidth = 3 * zoom
+    ctx.stroke()
   }
 
-  // Endpoints
-  const endpointRadius = 12 * zoom
+  // Remplissage si sélectionné
+  if (isSelected && !isInvalid) {
+    ctx.beginPath()
+    ctx.rect(corners[0].x, corners[0].y, corners[1].x - corners[0].x, corners[2].y - corners[0].y)
+    ctx.fillStyle = strokeColor + '40'  // 40 = ~25% opacity
+    ctx.fill()
+  }
 
+  // Contour principal
   ctx.beginPath()
-  ctx.arc(start.x, start.y, endpointRadius, 0, Math.PI * 2)
-  ctx.fillStyle = strokeColor
-  ctx.fill()
-  ctx.strokeStyle = "white"
-  ctx.lineWidth = 3
-  ctx.stroke()
-
-  ctx.beginPath()
-  ctx.arc(end.x, end.y, endpointRadius, 0, Math.PI * 2)
-  ctx.fillStyle = strokeColor
-  ctx.fill()
-  ctx.strokeStyle = "white"
-  ctx.lineWidth = 3
-  ctx.stroke()
-
-  // Label au centre
-  const midX = (start.x + end.x) / 2
-  const midY = (start.y + end.y) / 2
-
-  const direction = link.direction || "both"
-  const text = isStairs ? "E" : "A"
-  let icon = ""
-  
-  if (direction === "up") icon = "↑"
-  else if (direction === "down") icon = "↓"
-  else icon = "↕"
-
-  const fontSize = Math.max(8, 10 * zoom)
-  ctx.font = `${fontSize}px system-ui, -apple-system, sans-serif`
-  ctx.textAlign = "center"
-  ctx.textBaseline = "middle"
-  
-  const textWidth = ctx.measureText(text).width
-  const padding = 4 * zoom
-  
-  // Rectangle de fond
-  ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
-  ctx.beginPath()
-  ctx.roundRect(
-    midX - textWidth/2 - padding,
-    midY - fontSize/2 - padding/2,
-    textWidth + padding*2,
-    fontSize + padding,
-    2 * zoom
-  )
-  ctx.fill()
-  
-  // Contour
+  ctx.rect(corners[0].x, corners[0].y, corners[1].x - corners[0].x, corners[2].y - corners[0].y)
   ctx.strokeStyle = strokeColor
-  ctx.lineWidth = 1
+  ctx.lineWidth = (isSelected ? 3 : 2) * zoom
   ctx.stroke()
+
+  // Icône au centre
+  const centerX = (corners[0].x + corners[2].x) / 2
+  const centerY = (corners[0].y + corners[2].y) / 2
   
-  // Texte
   ctx.fillStyle = strokeColor
-  ctx.fillText(text, midX, midY)
+  ctx.font = `${16 * zoom}px Arial`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(isStairs ? '↕' : '⬍', centerX, centerY)
   
-  // Icône direction
-  if (icon) {
-    const iconSize = Math.max(6, 8 * zoom)
-    ctx.font = `${iconSize}px system-ui, -apple-system, sans-serif`
-    ctx.fillText(icon, midX + 8 * zoom, midY - 2 * zoom)
+  // Afficher le nombre d'étages connectés
+  if (connectedFloorsCount > 1) {
+    ctx.font = `${12 * zoom}px Arial`
+    ctx.fillText(`${connectedFloorsCount} étages`, centerX, centerY + 20 * zoom)
+  }
+
+  // Points de contrôle aux coins (seulement si sélectionné)
+  if (isSelected) {
+    const pointRadius = 6 * zoom
+    corners.forEach(corner => {
+      ctx.beginPath()
+      ctx.arc(corner.x, corner.y, pointRadius, 0, Math.PI * 2)
+      ctx.fillStyle = strokeColor
+      ctx.fill()
+      ctx.strokeStyle = '#ffffff'
+      ctx.lineWidth = 2 * zoom
+      ctx.stroke()
+    })
   }
 }

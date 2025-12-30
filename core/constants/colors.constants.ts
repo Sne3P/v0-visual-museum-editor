@@ -77,12 +77,10 @@ export const COLORS = {
   
   stairsDefault: "#16a34a",
   stairsSelected: "#15803d",  
-  stairsHovered: "#22c55e",
-  stairsInvalid: "#dc2626",
-  
+  stairsHovered: "#f59e0b",
   elevatorDefault: "#dc2626",
   elevatorSelected: "#b91c1c",
-  elevatorHovered: "#f87171",
+  elevatorHovered: "#f59e0b",
   elevatorInvalid: "#dc2626",
 
   wallDefault: "#374151",

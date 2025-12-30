@@ -21,26 +21,28 @@ export type Tool =
 
 export type ElementType = "room" | "artwork" | "door" | "wall" | "verticalLink"
 export type DragElementType = ElementType | "vertex"
-export type HoverElementType = ElementType | "vertex" | "segment" | "doorEndpoint" | "linkEndpoint" | "wallEndpoint" | "wallVertex" | "wallSegment"
+export type HoverElementType = ElementType | "vertex" | "segment" | "doorEndpoint" | "linkEndpoint" | "wallEndpoint" | "wallVertex" | "wallSegment" | "verticalLinkVertex"
 
 export interface SelectionInfo {
   readonly id: string
-  readonly type: ElementType | "vertex" | "segment" | "wallVertex" | "wallSegment" | "wallEndpoint"
+  readonly type: ElementType | "vertex" | "segment" | "wallVertex" | "wallSegment" | "wallEndpoint" | "verticalLinkVertex"
   readonly vertexIndex?: number
   readonly segmentIndex?: number
   readonly roomId?: string
   readonly wallId?: string
+  readonly verticalLinkId?: string
   readonly endpointIndex?: number
 }
 
 // Alias simplifié pour la sélection
 export interface SelectedElement {
-  readonly type: ElementType | "vertex" | "segment" | "wallVertex" | "wallSegment" | "wallEndpoint"
+  readonly type: ElementType | "vertex" | "segment" | "wallVertex" | "wallSegment" | "wallEndpoint" | "verticalLinkVertex"
   readonly id: string
   readonly vertexIndex?: number
   readonly segmentIndex?: number
   readonly roomId?: string
   readonly wallId?: string
+  readonly verticalLinkId?: string
   readonly endpointIndex?: number
 }
 
@@ -59,6 +61,7 @@ export interface HoverInfo {
   readonly endpoint?: "start" | "end"
   readonly roomId?: string
   readonly wallId?: string
+  readonly verticalLinkId?: string
   readonly segmentIndex?: number
 }
 

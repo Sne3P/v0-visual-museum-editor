@@ -39,14 +39,15 @@ export interface Door {
 }
 
 // ==================== VERTICAL LINK ====================
-
+// Lien technique entre étages (pas de représentation visuelle dans autres étages)
 export interface VerticalLink {
   readonly id: string
   readonly type: "stairs" | "elevator"
-  readonly segment: readonly [Point, Point]
-  readonly width: number
-  readonly to_floor: string
-  readonly direction?: "up" | "down" | "both"
+  readonly floorId: string  // Étage où est physiquement situé l'élément
+  readonly position: Point  // Position simple (centre)
+  readonly size: readonly [number, number]  // [largeur, hauteur] pour le rectangle
+  readonly connectedFloorIds: readonly string[]  // Liste des étages connectés (liens techniques)
+  readonly roomId?: string  // Room parent (contrainte: doit rester dans cette room)
 }
 
 // ==================== ESCALATOR ====================

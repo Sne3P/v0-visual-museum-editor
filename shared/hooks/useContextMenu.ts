@@ -32,6 +32,7 @@ interface UseContextMenuOptions {
   }
   canvasRef?: React.RefObject<HTMLCanvasElement>
   onOpenPropertiesModal?: (type: 'room' | 'artwork' | 'wall' | 'door' | 'verticalLink', id: string) => void
+  onEditVerticalLinkFloors?: (linkId: string) => void
 }
 
 interface UseContextMenuReturn {
@@ -66,6 +67,7 @@ export function useContextMenu({
   detectElementAt,
   canvasRef,
   onOpenPropertiesModal,
+  onEditVerticalLinkFloors,
 }: UseContextMenuOptions): UseContextMenuReturn {
   // État local pour les actions disponibles
   const [actions, setActions] = useState<ContextMenuAction[]>([])
@@ -223,6 +225,12 @@ export function useContextMenu({
         actualiser: () => {
           executeActualiser(state)
           updates = {}
+          saveHistory = false
+        },
+        modifier_etages: () => {
+          if (state.contextMenu?.elementId && state.contextMenu?.elementType === 'verticalLink') {
+            onEditVerticalLinkFloors?.(state.contextMenu.elementId)
+          }
           saveHistory = false
         },
       }

@@ -34,8 +34,12 @@ export const CONSTRAINTS = {
   },
   
   verticalLink: {
-    minWidth: 0.4,
-    maxWidth: 15.0,
+    minSize: [0.8, 0.8] as const,  // [largeur, hauteur] minimales en mètres
+    maxSize: [15.0, 15.0] as const,
+    defaultSize: {
+      stairs: [2.0, 3.0] as const,    // Taille par défaut pour escalier
+      elevator: [2.0, 2.0] as const   // Taille par défaut pour ascenseur
+    },
     minClearance: 0.15,
     snapTolerance: 0.3,
   },

@@ -9,7 +9,14 @@
 
 import { useCallback } from "react"
 import type { Point, EditorState, SelectedElement, SelectionInfo, HoverInfo } from "@/core/entities"
-import { isPointInPolygon, distanceToSegment, distance, applySmartSelection, cleanRedundantSelection } from "@/core/services"
+import { 
+  isPointInPolygon, 
+  distanceToSegment, 
+  distance, 
+  applySmartSelection, 
+  cleanRedundantSelection,
+  getVerticalLinkCorners 
+} from "@/core/services"
 import { VERTEX_HIT_RADIUS, ENDPOINT_HIT_RADIUS, LINE_HIT_THRESHOLD } from "@/core/constants"
 
 export interface SelectionOptions {
@@ -30,7 +37,7 @@ export function useCanvasSelection(
   currentFloorId: string,
   updateState: (updates: Partial<EditorState>, saveHistory?: boolean) => void,
   options: SelectionOptions = { 
-    tolerance: 10, 
+    tolerance: 8, 
     multiSelect: true,
     enableVertexSelection: true,
     enableSegmentSelection: true
@@ -45,7 +52,36 @@ export function useCanvasSelection(
     const endpointTolerance = ENDPOINT_HIT_RADIUS / zoom
     const lineTolerance = LINE_HIT_THRESHOLD / zoom
 
-    // PRIORITÉ 1 : VERTICES DES ROOMS
+    // PRIORITÉ 1 : VERTICES DES VERTICAL LINKS
+    if (options.enableVertexSelection && currentFloor.verticalLinks) {
+      for (const link of currentFloor.verticalLinks) {
+        const corners = getVerticalLinkCorners(link)
+        for (let i = 0; i < corners.length; i++) {
+          const corner = corners[i]
+          const dist = distance(point, corner)
+          
+          if (dist <= vertexTolerance) {
+            return {
+              element: { type: 'verticalLink', id: link.id },
+              selectionInfo: {
+                id: link.id,
+                type: 'verticalLinkVertex',
+                vertexIndex: i,
+                verticalLinkId: link.id
+              },
+              hoverInfo: {
+                type: 'verticalLinkVertex',
+                id: link.id,
+                vertexIndex: i,
+                verticalLinkId: link.id
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // PRIORITÉ 2 : VERTICES DES ROOMS
     if (options.enableVertexSelection) {
       for (const room of currentFloor.rooms) {
         for (let i = 0; i < room.polygon.length; i++) {
@@ -154,25 +190,6 @@ export function useCanvasSelection(
       }
     }
 
-    for (const link of currentFloor.verticalLinks) {
-      for (let i = 0; i < 2; i++) {
-        const endpoint = link.segment[i]
-        const dist = distance(point, endpoint)
-        
-        if (dist <= endpointTolerance) {
-          return {
-            element: { type: 'verticalLink', id: link.id },
-            selectionInfo: { id: link.id, type: 'verticalLink' },
-            hoverInfo: {
-              type: 'linkEndpoint',
-              id: link.id,
-              endpoint: i === 0 ? 'start' : 'end'
-            }
-          }
-        }
-      }
-    }
-
     // PRIORITÉ 4.5 : PORTES (avant segments de rooms, après artworks)
     for (const door of currentFloor.doors) {
       // Convertir coordonnées grille -> pixels
@@ -243,6 +260,26 @@ export function useCanvasSelection(
       }
     }
 
+    // PRIORITÉ 6.5 : VERTICAL LINKS (élément entier)
+    for (const link of currentFloor.verticalLinks) {
+      // Ignorer les liens d'autres étages
+      if (link.floorId !== currentFloor.id) continue
+      
+      const halfWidth = link.size[0] / 2
+      const halfHeight = link.size[1] / 2
+      
+      if (point.x >= link.position.x - halfWidth &&
+          point.x <= link.position.x + halfWidth &&
+          point.y >= link.position.y - halfHeight &&
+          point.y <= link.position.y + halfHeight) {
+        return {
+          element: { type: 'verticalLink', id: link.id },
+          selectionInfo: { id: link.id, type: 'verticalLink' },
+          hoverInfo: { type: 'verticalLink', id: link.id }
+        }
+      }
+    }
+
     // PRIORITÉ 4.5 : DOORS (placées avant segments de rooms)
     for (const door of currentFloor.doors) {
       const dist = distanceToSegment(point, door.segment[0], door.segment[1])
@@ -251,26 +288,6 @@ export function useCanvasSelection(
           element: { type: 'door', id: door.id },
           selectionInfo: { id: door.id, type: 'door' },
           hoverInfo: { type: 'door', id: door.id }
-        }
-      }
-    }
-
-    // PRIORITÉ 7 : VERTICAL LINKS
-    for (const link of currentFloor.verticalLinks) {
-      const [startX, startY] = [link.segment[0].x, link.segment[0].y]
-      const [endX, endY] = [link.segment[1].x, link.segment[1].y]
-      const centerX = (startX + endX) / 2
-      const centerY = (startY + endY) / 2
-      
-      const dx = point.x - centerX
-      const dy = point.y - centerY
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      
-      if (dist <= 60 + tolerance) {
-        return {
-          element: { type: 'verticalLink', id: link.id },
-          selectionInfo: { id: link.id, type: 'verticalLink' },
-          hoverInfo: { type: 'verticalLink', id: link.id }
         }
       }
     }
@@ -483,12 +500,26 @@ export function useCanvasSelection(
     }
 
     for (const link of currentFloor.verticalLinks) {
-      const allPointsInside = link.segment.every(point =>
-        point.x >= min.x && point.x <= max.x &&
-        point.y >= min.y && point.y <= max.y
+      // Ignorer les liens d'autres étages
+      if (link.floorId !== currentFloor.id) continue
+      
+      const halfWidth = link.size[0] / 2
+      const halfHeight = link.size[1] / 2
+      
+      // Vérifier si tous les coins du rectangle sont dans la zone de sélection
+      const corners = [
+        { x: link.position.x - halfWidth, y: link.position.y - halfHeight },
+        { x: link.position.x + halfWidth, y: link.position.y - halfHeight },
+        { x: link.position.x + halfWidth, y: link.position.y + halfHeight },
+        { x: link.position.x - halfWidth, y: link.position.y + halfHeight }
+      ]
+      
+      const allCornersInside = corners.every(corner =>
+        corner.x >= min.x && corner.x <= max.x &&
+        corner.y >= min.y && corner.y <= max.y
       )
       
-      if (allPointsInside) {
+      if (allCornersInside) {
         selected.push({ type: 'verticalLink', id: link.id })
       }
     }

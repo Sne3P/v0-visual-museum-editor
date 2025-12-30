@@ -6,7 +6,7 @@
 
 import { useState, useCallback, type MouseEvent } from "react"
 import type { Point, EditorState, Floor, SelectedElement, Room } from "@/core/entities"
-import { HISTORY_ACTIONS } from "@/core/constants"
+import { HISTORY_ACTIONS, GRID_SIZE } from "@/core/constants"
 import {
   translateRoom,
   translateWall,
@@ -14,11 +14,12 @@ import {
   translateArtwork,
   translateVerticalLink,
   calculateDelta,
-  validateRoomMoveWithDoors
+  validateRoomMoveWithDoors,
+  snapToGrid,
+  validateRoomGeometry,
+  validateWallPlacement,
+  validateVerticalLinkMove
 } from "@/core/services"
-import { snapToGrid } from "@/core/services"
-import { validateRoomGeometry, validateWallPlacement } from "@/core/services"
-import { GRID_SIZE } from "@/core/constants"
 
 interface ElementDragOptions {
   state: EditorState
@@ -84,6 +85,9 @@ export function useElementDrag({
             const attachedWalls = currentFloor.walls?.filter(w => w.roomId === selected.id) || []
             const attachedDoors = currentFloor.doors?.filter(d => d.roomId === selected.id) || []
             const attachedArtworks = currentFloor.artworks?.filter(a => a.roomId === selected.id) || []
+            const attachedVerticalLinks = currentFloor.verticalLinks?.filter(v => 
+              v.roomId === selected.id && v.floorId === currentFloor.id
+            ) || []
             
             attachedWalls.forEach(wall => {
               originalElements.set(`wall_${wall.id}`, JSON.parse(JSON.stringify(wall)))
@@ -93,6 +97,9 @@ export function useElementDrag({
             })
             attachedArtworks.forEach(artwork => {
               originalElements.set(`artwork_${artwork.id}`, JSON.parse(JSON.stringify(artwork)))
+            })
+            attachedVerticalLinks.forEach(vlink => {
+              originalElements.set(`verticalLink_${vlink.id}`, JSON.parse(JSON.stringify(vlink)))
             })
           }
           break
@@ -182,6 +189,12 @@ export function useElementDrag({
                 if (idx >= 0) {
                   newArtworks[idx] = translateArtwork(element, delta)
                 }
+              } else if (key.startsWith('verticalLink_')) {
+                const linkId = key.substring(13)
+                const idx = newVerticalLinks.findIndex(v => v.id === linkId)
+                if (idx >= 0) {
+                  newVerticalLinks[idx] = translateVerticalLink(element, delta)
+                }
               }
             })
             break
@@ -270,6 +283,18 @@ export function useElementDrag({
           if (!validation.valid) {
             isValid = false
             validationMessage = validation.message ?? null
+            break
+          }
+        }
+      } else if (selected.type === 'verticalLink') {
+        const updatedFloor = updatedFloors.find(f => f.id === currentFloor.id)
+        const originalLink = dragState.originalElements.get(selected.id)
+        
+        if (originalLink && updatedFloor) {
+          const validation = validateVerticalLinkMove(originalLink, delta, updatedFloor)
+          if (!validation.valid) {
+            isValid = false
+            validationMessage = validation.message ?? 'Déplacement invalide'
             break
           }
         }

@@ -78,10 +78,10 @@ export function translateArtwork(artwork: Artwork, delta: Point): Artwork {
 export function translateVerticalLink(link: VerticalLink, delta: Point): VerticalLink {
   return {
     ...link,
-    segment: [
-      { x: link.segment[0].x + delta.x, y: link.segment[0].y + delta.y },
-      { x: link.segment[1].x + delta.x, y: link.segment[1].y + delta.y }
-    ]
+    position: {
+      x: link.position.x + delta.x,
+      y: link.position.y + delta.y
+    }
   }
 }
 

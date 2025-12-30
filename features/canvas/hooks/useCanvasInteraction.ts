@@ -19,8 +19,10 @@ interface CanvasInteractionOptions {
   freeFormCreation: any
   wallCreation: any
   doorCreation: any
+  verticalLinkCreation: any
   elementDrag: any
   vertexEdit: any
+  verticalLinkEdit: any
   wallEndpointEdit: any
   screenToWorld: (x: number, y: number) => Point
   onContextMenu?: (x: number, y: number, worldPos: Point) => void
@@ -36,8 +38,10 @@ export function useCanvasInteraction({
   freeFormCreation,
   wallCreation,
   doorCreation,
+  verticalLinkCreation,
   elementDrag,
   vertexEdit,
+  verticalLinkEdit,
   wallEndpointEdit,
   screenToWorld,
   onContextMenu
@@ -176,6 +180,13 @@ export function useCanvasInteraction({
       return
     }
 
+    // Création d'escalier ou ascenseur (drag-based)
+    if ((state.selectedTool === 'stairs' || state.selectedTool === 'elevator') && e.button === 0) {
+      verticalLinkCreation.startCreation(snapResult.point, state.selectedTool)
+      setCursorType('crosshair')
+      return
+    }
+
     // Création forme libre (point par point)
     if (state.selectedTool === 'room' && e.button === 0) {
       freeFormCreation.addPoint(snapResult.point)
@@ -192,8 +203,11 @@ export function useCanvasInteraction({
     shapeCreation, 
     freeFormCreation,
     wallCreation,
+    doorCreation,
+    verticalLinkCreation,
     elementDrag,
-    vertexEdit
+    vertexEdit,
+    verticalLinkEdit
   ])
 
   /**
@@ -231,7 +245,7 @@ export function useCanvasInteraction({
     setHoveredPoint(snapResult.point)
     
     // NOUVEAU: Détecter début de drag si mouseDown + mouvement suffisant
-    if (mouseDownInfo && !elementDrag.dragState.isDragging && !vertexEdit.editState.isEditing && !wallEndpointEdit.editState.isEditing) {
+    if (mouseDownInfo && !elementDrag.dragState.isDragging && !vertexEdit.editState.isEditing && !verticalLinkEdit.editState.isEditing && !wallEndpointEdit.editState.isEditing) {
       const distance = Math.sqrt(
         Math.pow(worldPos.x - mouseDownInfo.point.x, 2) +
         Math.pow(worldPos.y - mouseDownInfo.point.y, 2)
@@ -247,6 +261,18 @@ export function useCanvasInteraction({
         if (selectionInfo?.type === 'wallVertex' && selectionInfo?.wallId !== undefined) {
           wallEndpointEdit.startEdit(
             selectionInfo.wallId, 
+            selectionInfo.vertexIndex ?? 0, 
+            mouseDownInfo.point
+          )
+          setCursorType('grabbing')
+          setMouseDownInfo(null)
+          return
+        }
+
+        // Priorité 0.5 : Drag verticalLinkVertex
+        if (selectionInfo?.type === 'verticalLinkVertex' && selectionInfo?.verticalLinkId !== undefined) {
+          verticalLinkEdit.startEdit(
+            selectionInfo.verticalLinkId, 
             selectionInfo.vertexIndex ?? 0, 
             mouseDownInfo.point
           )
@@ -315,6 +341,12 @@ export function useCanvasInteraction({
       vertexEdit.updateVertex(e, !e.shiftKey) // Shift = disable smart snap
       return
     }
+
+    // NOUVEAU: Édition vertex vertical link en cours
+    if (verticalLinkEdit.editState.isEditing) {
+      verticalLinkEdit.updateEdit(e)
+      return
+    }
     
     // NOUVEAU: Édition endpoint mur en cours
     if (wallEndpointEdit.editState.isEditing) {
@@ -366,6 +398,11 @@ export function useCanvasInteraction({
       doorCreation.updateCreation(snapResult.point)
     }
 
+    // Création lien vertical en cours (drag)
+    if (verticalLinkCreation.state.isCreating) {
+      verticalLinkCreation.updateCurrentPoint(snapResult.point)
+    }
+
     // Création forme libre: mise à jour hover
     if (freeFormCreation.state.isCreating) {
       freeFormCreation.updateHover(snapResult.point)
@@ -383,9 +420,13 @@ export function useCanvasInteraction({
     selection,
     shapeCreation, 
     freeFormCreation, 
+    wallCreation,
+    doorCreation,
+    verticalLinkCreation,
     boxSelection,
     elementDrag,
     vertexEdit,
+    verticalLinkEdit,
     mouseDownInfo
   ])
 
@@ -412,6 +453,14 @@ export function useCanvasInteraction({
     // NOUVEAU: Édition vertex terminée
     if (vertexEdit.editState.isEditing) {
       vertexEdit.finishEdit()
+      setCursorType('default')
+      setMouseDownInfo(null)
+      return
+    }
+
+    // NOUVEAU: Édition vertex vertical link terminée
+    if (verticalLinkEdit.editState.isEditing) {
+      verticalLinkEdit.finishEdit()
       setCursorType('default')
       setMouseDownInfo(null)
       return
@@ -474,16 +523,24 @@ export function useCanvasInteraction({
       doorCreation.completeCreation()
       setCursorType('crosshair')
     }
+    
+    // Création lien vertical terminée (drag-based)
+    if (e.button === 0 && verticalLinkCreation.state.isCreating) {
+      verticalLinkCreation.finishCreation()
+      setCursorType('crosshair')
+    }
   }, [
     shapeCreation, 
     wallCreation,
     doorCreation,
+    verticalLinkCreation,
     boxSelection, 
     selection, 
     state.selectedElements, 
     updateState,
     elementDrag,
     vertexEdit,
+    verticalLinkEdit,
     wallEndpointEdit
   ])
 
