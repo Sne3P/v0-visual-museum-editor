@@ -21,12 +21,32 @@ let clipboard: { element: SelectedElement; data: any } | null = null
 /**
  * Supprimer un élément simple (room, artwork, door, wall, verticalLink)
  * Pour verticalLink: suppression en cascade sur tous les étages du même groupe
+ * Pour artwork: supprime aussi le PDF associé via l'API
  */
-function deleteSimpleElement(
+async function deleteSimpleElement(
   floor: any,
   type: 'rooms' | 'artworks' | 'doors' | 'walls' | 'verticalLinks',
   id: string
-): any {
+): Promise<any> {
+  // Si artwork, supprimer le PDF associé d'abord
+  if (type === 'artworks') {
+    const artwork = (floor[type] || []).find((el: any) => el.id === id)
+    if (artwork && artwork.pdfPath) {
+      try {
+        const response = await fetch(`/api/artwork-pdf?pdfPath=${encodeURIComponent(artwork.pdfPath)}`, {
+          method: 'DELETE'
+        })
+        if (!response.ok) {
+          console.warn(`⚠️ Échec suppression PDF pour artwork ${id}:`, await response.text())
+        } else {
+          console.log(`✅ PDF supprimé: ${artwork.pdfPath}`)
+        }
+      } catch (error) {
+        console.error(`❌ Erreur suppression PDF pour artwork ${id}:`, error)
+      }
+    }
+  }
+  
   return {
     ...floor,
     [type]: (floor[type] || []).filter((el: any) => el.id !== id)
@@ -154,10 +174,10 @@ function deleteWallVertex(
 /**
  * SUPPRIMER - Supprime élément(s) sélectionné(s)
  */
-export function executeSupprimer(
+export async function executeSupprimer(
   state: EditorState,
   currentFloorId: string
-): EditorState {
+): Promise<EditorState> {
   console.log('🗑️ SERVICE.SUPPRIMER: Début, selectedElements:', state.selectedElements.length)
   
   if (state.selectedElements.length === 0) {
@@ -176,11 +196,11 @@ export function executeSupprimer(
   const { deleteRoomWithChildren } = require('./cascade.service')
 
   // SUPPRESSION EN CASCADE - Traiter chaque élément
-  state.selectedElements.forEach(selected => {
+  for (const selected of state.selectedElements) {
     try {
-      // ROOM: suppression en cascade (+ walls, doors, artworks)
+      // ROOM: suppression en cascade (+ walls, doors, artworks + PDFs)
       if (selected.type === 'room') {
-        updatedFloor = deleteRoomWithChildren(updatedFloor, selected.id)
+        updatedFloor = await deleteRoomWithChildren(updatedFloor, selected.id)
         successCount++
       }
       // Éléments simples (artwork, door, wall, verticalLink)
@@ -191,7 +211,7 @@ export function executeSupprimer(
           wall: 'walls',
           verticalLink: 'verticalLinks'
         }
-        updatedFloor = deleteSimpleElement(updatedFloor, typeMap[selected.type], selected.id)
+        updatedFloor = await deleteSimpleElement(updatedFloor, typeMap[selected.type], selected.id)
         successCount++
       }
       // Vertex
@@ -231,7 +251,7 @@ export function executeSupprimer(
       console.error(`❌ Erreur suppression ${selected.type}:`, error)
       skippedElements.push(`${selected.type} ${selected.id || ''}`)
     }
-  })
+  }
 
   // Log du résultat
   console.log(`✅ Suppression terminée: ${successCount} éléments supprimés, ${skippedElements.length} ignorés`)

@@ -149,16 +149,16 @@ export function useContextMenu({
    * Exécuter une action du menu contextuel
    */
   const executeAction = useCallback(
-    (action: ContextMenuAction) => {
+    async (action: ContextMenuAction) => {
 
       let updates: Partial<EditorState> | null = null
       let saveHistory = true
       let historyLabel = ''
       
       // Mapping action → (service call, history)
-      const actionHandlers: Record<string, () => void> = {
-        supprimer: () => {
-          const newState = executeSupprimer(state, currentFloor.id)
+      const actionHandlers: Record<string, () => void | Promise<void>> = {
+        supprimer: async () => {
+          const newState = await executeSupprimer(state, currentFloor.id)
           updates = { floors: newState.floors, selectedElements: newState.selectedElements }
           historyLabel = 'Supprimer élément'
         },
@@ -238,7 +238,7 @@ export function useContextMenu({
       // Exécuter l'action si elle existe
       const handler = actionHandlers[action]
       if (handler) {
-        handler()
+        await handler()
       } else {
         console.warn('Action non implémentée:', action)
       }

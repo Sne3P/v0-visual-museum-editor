@@ -302,9 +302,9 @@ export function MuseumEditor() {
 
   // ==================== RACCOURCIS CLAVIER ====================
 
-  const handleDelete = useCallback(() => {
+  const handleDelete = useCallback(async () => {
     if (state.selectedElements.length === 0) return
-    const newState = executeSupprimer(state, currentFloor.id)
+    const newState = await executeSupprimer(state, currentFloor.id)
     updateState(
       {
         floors: newState.floors,
@@ -487,7 +487,7 @@ export function MuseumEditor() {
           onSave={(artworkId, pdfFile, pdfUrl, title, base64) => {
             handleUpdateArtwork(artworkId, { 
               name: title || pdfDialogArtwork.name,
-              pdfLink: pdfUrl || pdfDialogArtwork.pdfLink,
+              pdfPath: pdfUrl || pdfDialogArtwork.pdfPath || pdfDialogArtwork.pdfLink,
               pdf_id: base64 ? artworkId : pdfDialogArtwork.pdf_id
             })
             setPdfDialogArtwork(null)

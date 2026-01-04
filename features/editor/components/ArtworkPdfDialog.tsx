@@ -12,7 +12,7 @@ interface ArtworkPdfDialogProps {
 export function ArtworkPdfDialog({ artwork, onClose, onSave }: ArtworkPdfDialogProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [currentPdfUrl, setCurrentPdfUrl] = useState<string>(artwork.pdfLink || "")
+  const [currentPdfUrl, setCurrentPdfUrl] = useState<string>(artwork.pdfPath || artwork.pdfLink || "")
   const [artworkTitle, setArtworkTitle] = useState<string>(artwork.name || "")
   const fileInputRef = useRef<HTMLInputElement>(null)
 

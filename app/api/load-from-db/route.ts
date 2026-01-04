@@ -107,7 +107,7 @@ export async function GET() {
             xy: artworkPoints.length > 0 ? [artworkPoints[0].x, artworkPoints[0].y] : [0, 0],
             size: metadata.size || [40, 40],
             name: oeuvre?.title || entity.name || 'Sans titre',
-            pdfLink: oeuvre?.pdf_link || metadata.pdfLink || null,
+            pdfPath: oeuvre?.file_path || oeuvre?.pdf_link || metadata.pdfPath || null,
             roomId: metadata.roomId
           }
         })

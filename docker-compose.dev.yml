@@ -20,6 +20,7 @@ services:
       FLASK_DEBUG: "1"
     volumes:
       - ./backend/rag:/app/rag:cached
+      - uploads_data:/app/uploads  # Volume partagé pour PDFs
     command: python -m flask --app rag/main_postgres.py run --host=0.0.0.0 --port=5000 --reload
 
   # Next.js App - Hot-reload  

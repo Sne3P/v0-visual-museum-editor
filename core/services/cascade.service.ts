@@ -30,9 +30,28 @@ export function getRoomChildren(floor: Floor, roomId: string) {
 /**
  * Supprimer une room ET tous ses enfants (cascade)
  * Inclut aussi les portes qui connectent cette room à d'autres
+ * Supprime aussi les PDFs associés aux artworks de cette room
  */
-export function deleteRoomWithChildren(floor: Floor, roomId: string): Floor {
+export async function deleteRoomWithChildren(floor: Floor, roomId: string): Promise<Floor> {
   const children = getRoomChildren(floor, roomId)
+  
+  // NOUVEAU: Supprimer les PDFs des artworks de cette room
+  for (const artwork of children.artworks) {
+    if (artwork.pdfPath) {
+      try {
+        const response = await fetch(`/api/artwork-pdf?pdfPath=${encodeURIComponent(artwork.pdfPath)}`, {
+          method: 'DELETE'
+        })
+        if (!response.ok) {
+          console.warn(`⚠️ Échec suppression PDF pour artwork ${artwork.id}:`, await response.text())
+        } else {
+          console.log(`✅ PDF supprimé: ${artwork.pdfPath}`)
+        }
+      } catch (error) {
+        console.error(`❌ Erreur suppression PDF pour artwork ${artwork.id}:`, error)
+      }
+    }
+  }
   
   // NOUVEAU: Trouver aussi les portes à supprimer (qui connectent cette room)
   const doorsToDelete = getDoorsToDeleteWithRoom(roomId, floor)

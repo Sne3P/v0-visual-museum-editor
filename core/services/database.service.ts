@@ -29,7 +29,8 @@ interface ExportOeuvre {
   artist: string
   description: string
   image_link: string | null
-  pdf_link: string | null
+  pdf_link: string | null  // Legacy
+  pdf_path?: string | null  // Nouveau
   room: number
 }
 
@@ -131,7 +132,7 @@ export function convertStateToExportData(state: EditorState): ExportData {
     floor.artworks.forEach((artwork) => {
       const oeuvreId = oeuvreIdCounter++
       
-      let finalPdfLink = artwork.pdfLink || null
+      let finalPdfPath = artwork.pdfPath || artwork.pdfLink || null
       
       // Gérer PDF temporaires
       if ((artwork as any).tempPdfFile && (artwork as any).tempPdfBase64) {
@@ -140,7 +141,7 @@ export function convertStateToExportData(state: EditorState): ExportData {
           filename: fileName,
           base64: (artwork as any).tempPdfBase64
         })
-        finalPdfLink = `/uploads/pdfs/${fileName}`
+        finalPdfPath = `/uploads/pdfs/${fileName}`
       }
 
       oeuvres.push({
@@ -149,7 +150,8 @@ export function convertStateToExportData(state: EditorState): ExportData {
         artist: 'Artiste inconnu',
         description: '',
         image_link: null,
-        pdf_link: finalPdfLink,
+        pdf_path: finalPdfPath,
+        pdf_link: finalPdfPath,  // Legacy compatibility
         room: artwork.roomId ? parseInt(artwork.roomId.split('-')[1] || '1') : 1
       })
 
@@ -164,7 +166,7 @@ export function convertStateToExportData(state: EditorState): ExportData {
           id: artwork.id,
           size: artwork.size || [40, 40],
           roomId: artwork.roomId,
-          pdfLink: finalPdfLink
+          pdfPath: finalPdfPath
         }),
         oeuvre_id: oeuvreId
       })

@@ -33,15 +33,16 @@ export async function POST(request: NextRequest) {
       if (exportData.oeuvres_contenus?.oeuvres) {
         for (const oeuvre of exportData.oeuvres_contenus.oeuvres) {
           await client.query(
-            `INSERT INTO oeuvres (oeuvre_id, title, artist, description, image_link, pdf_link, room) 
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            `INSERT INTO oeuvres (oeuvre_id, title, artist, description, image_link, pdf_link, file_path, room) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
             [
               oeuvre.oeuvre_id,
               oeuvre.title,
               oeuvre.artist,
               oeuvre.description || '',
               oeuvre.image_link || null,
-              oeuvre.pdf_link || null,
+              oeuvre.pdf_path || oeuvre.pdf_link || null,
+              oeuvre.pdf_path || null,
               oeuvre.room
             ]
           )

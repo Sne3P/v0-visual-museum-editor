@@ -1,109 +1,145 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { executeTransaction } from '@/lib/database-postgres'
+import { promises as fs } from 'fs'
+import path from 'path'
 
+/**
+ * POST - Upload ou mise à jour d'un PDF pour une œuvre
+ * Gère automatiquement la suppression de l'ancien fichier
+ */
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData()
     const artworkId = formData.get('artworkId') as string
-    const pdfFile = formData.get('pdfFile') as File
-    const artworkTitle = formData.get('artworkTitle') as string
+    const pdfFile = formData.get('pdfFile') as File | null
+    const oldPdfPath = formData.get('oldPdfPath') as string | null
     
     if (!artworkId) {
       return NextResponse.json({ error: 'ID de l\'œuvre manquant' }, { status: 400 })
     }
 
-    let pdfLink = ''
-    
-    if (pdfFile) {
-      // Sauvegarder le fichier dans le dossier public/uploads/pdfs
-      const timestamp = Date.now()
-      // Nettoyer l'artworkId pour éviter la duplication du préfixe "artwork"
-      const cleanArtworkId = artworkId.startsWith('artwork-') ? artworkId.substring(8) : artworkId
-      const fileName = `artwork_${cleanArtworkId}_${timestamp}_${pdfFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`
-      pdfLink = `/uploads/pdfs/${fileName}`
-      
+    // Supprimer l'ancien PDF si existant
+    if (oldPdfPath) {
+      const oldFullPath = path.join(process.cwd(), 'public', oldPdfPath)
       try {
-        const bytes = await pdfFile.arrayBuffer()
-        const buffer = Buffer.from(bytes)
-        
-        // Vérifier que le fichier commence bien par %PDF
-        const pdfHeader = buffer.subarray(0, 4).toString('ascii')
-        if (!pdfHeader.startsWith('%PDF')) {
-          console.error(`❌ Fichier invalide - En-tête: ${pdfHeader}`)
-          throw new Error('Le fichier uploadé n\'est pas un PDF valide')
-        }
-        
-        // Écrire le fichier sur le disque
-        const fs = require('fs')
-        const path = require('path')
-        const filePath = path.join(process.cwd(), 'public', 'uploads', 'pdfs', fileName)
-        
-        // Créer le dossier si il n'existe pas
-        fs.mkdirSync(path.dirname(filePath), { recursive: true })
-        
-        fs.writeFileSync(filePath, buffer)
-        console.log(`✅ PDF valide sauvegardé: ${fileName} (${pdfFile.size} bytes)`)
-        
-        // Vérifier après sauvegarde
-        const savedBuffer = fs.readFileSync(filePath)
-        const savedHeader = savedBuffer.subarray(0, 4).toString('ascii')
-        if (!savedHeader.startsWith('%PDF')) {
-          fs.unlinkSync(filePath) // Supprimer le fichier corrompu
-          throw new Error('Corruption détectée après sauvegarde')
-        }
-        
-      } catch (writeError) {
-        console.error('Erreur lors de l\'écriture du fichier:', writeError)
-        throw new Error(`Erreur lors de la sauvegarde du fichier PDF: ${writeError.message}`)
+        await fs.unlink(oldFullPath)
+        console.log(`✅ Ancien PDF supprimé: ${oldPdfPath}`)
+      } catch (error) {
+        console.warn(`⚠️ Impossible de supprimer l'ancien PDF: ${oldPdfPath}`, error)
       }
     }
 
-    // Note: Pour l'instant, nous ne mettons pas à jour la base de données directement
-    // car les œuvres n'existent en BDD qu'après un export complet.
-    // Le PDF et le titre seront sauvegardés dans l'état local de l'application et inclus lors de l'export.
-    console.log(`PDF associé à l'œuvre "${artworkTitle}" (${artworkId}): ${pdfLink}`)
+    // Si pas de nouveau fichier, c'est une suppression
+    if (!pdfFile) {
+      return NextResponse.json({ 
+        success: true, 
+        message: 'PDF supprimé avec succès',
+        pdfPath: null
+      })
+    }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: pdfFile ? 'PDF et titre uploadés avec succès' : 'PDF supprimé avec succès',
-      pdfLink: pdfLink || null,
-      artworkId,
-      artworkTitle
-    })
+    // Valider le fichier
+    if (!pdfFile.name.toLowerCase().endsWith('.pdf')) {
+      return NextResponse.json({ 
+        error: 'Le fichier doit être un PDF' 
+      }, { status: 400 })
+    }
+
+    // Générer nom de fichier unique
+    const timestamp = Date.now()
+    const cleanArtworkId = artworkId.replace(/[^a-zA-Z0-9]/g, '_')
+    const safeName = pdfFile.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+    const fileName = `artwork_${cleanArtworkId}_${timestamp}_${safeName}`
+    const relativePath = `/uploads/pdfs/${fileName}`
+    const fullPath = path.join(process.cwd(), 'public', relativePath)
+    
+    try {
+      // Lire le fichier
+      const bytes = await pdfFile.arrayBuffer()
+      const buffer = Buffer.from(bytes)
+      
+      // Vérifier signature PDF
+      const pdfHeader = buffer.subarray(0, 4).toString('ascii')
+      if (!pdfHeader.startsWith('%PDF')) {
+        console.error(`❌ Fichier invalide - En-tête: ${pdfHeader}`)
+        throw new Error('Le fichier n\'est pas un PDF valide')
+      }
+      
+      // Créer le dossier si nécessaire
+      await fs.mkdir(path.dirname(fullPath), { recursive: true })
+      
+      // Écrire le fichier
+      await fs.writeFile(fullPath, buffer)
+      console.log(`✅ PDF sauvegardé: ${fileName} (${pdfFile.size} bytes)`)
+      
+      // Vérifier après sauvegarde
+      const savedBuffer = await fs.readFile(fullPath)
+      const savedHeader = savedBuffer.subarray(0, 4).toString('ascii')
+      if (!savedHeader.startsWith('%PDF')) {
+        await fs.unlink(fullPath)
+        throw new Error('Corruption détectée après sauvegarde')
+      }
+      
+      return NextResponse.json({ 
+        success: true, 
+        message: 'PDF uploadé avec succès',
+        pdfPath: relativePath,
+        fileName,
+        size: pdfFile.size
+      })
+      
+    } catch (writeError) {
+      console.error('Erreur écriture fichier:', writeError)
+      return NextResponse.json({ 
+        error: 'Erreur lors de la sauvegarde du PDF',
+        details: writeError instanceof Error ? writeError.message : 'Erreur inconnue'
+      }, { status: 500 })
+    }
 
   } catch (error) {
-    console.error('Erreur lors de la sauvegarde du PDF:', error)
+    console.error('Erreur POST artwork-pdf:', error)
     return NextResponse.json({ 
-      error: 'Erreur lors de la sauvegarde du PDF',
+      error: 'Erreur serveur',
       details: error instanceof Error ? error.message : 'Erreur inconnue'
     }, { status: 500 })
   }
 }
 
-export async function GET(request: NextRequest) {
+/**
+ * DELETE - Suppression d'un PDF
+ */
+export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const artworkId = searchParams.get('artworkId')
+    const pdfPath = searchParams.get('pdfPath')
     
-    if (!artworkId) {
-      return NextResponse.json({ error: 'ID de l\'œuvre manquant' }, { status: 400 })
+    if (!pdfPath) {
+      return NextResponse.json({ error: 'Chemin PDF manquant' }, { status: 400 })
     }
 
-    // Note: Pour l'instant, nous ne récupérons pas depuis la base de données
-    // car les œuvres n'existent en BDD qu'après un export complet.
-    // Les PDFs sont stockés dans l'état local de l'application.
-    const pdfLink = null // Sera récupéré depuis l'état local
-
-    return NextResponse.json({ 
-      success: true, 
-      pdfLink,
-      artworkId
-    })
+    const fullPath = path.join(process.cwd(), 'public', pdfPath)
+    
+    try {
+      await fs.unlink(fullPath)
+      console.log(`✅ PDF supprimé: ${pdfPath}`)
+      
+      return NextResponse.json({ 
+        success: true, 
+        message: 'PDF supprimé avec succès'
+      })
+    } catch (unlinkError) {
+      if ((unlinkError as NodeJS.ErrnoException).code === 'ENOENT') {
+        return NextResponse.json({ 
+          success: true, 
+          message: 'PDF déjà supprimé ou inexistant'
+        })
+      }
+      throw unlinkError
+    }
 
   } catch (error) {
-    console.error('Erreur lors de la récupération du PDF:', error)
+    console.error('Erreur DELETE artwork-pdf:', error)
     return NextResponse.json({ 
-      error: 'Erreur lors de la récupération du PDF',
+      error: 'Erreur lors de la suppression',
       details: error instanceof Error ? error.message : 'Erreur inconnue'
     }, { status: 500 })
   }
