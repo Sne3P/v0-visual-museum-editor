@@ -80,8 +80,9 @@ export async function POST(request: NextRequest) {
       // UPSERT oeuvres (update if exists, insert if new) - PRESERVE pregenerations
       if (exportData.oeuvres_contenus?.oeuvres) {
         for (const oeuvre of exportData.oeuvres_contenus.oeuvres) {
-          const metadata = oeuvre.metadata || {}
-          console.log(`📝 Sauvegarde œuvre: ${oeuvre.title}, metadata:`, metadata)
+          // Les métadonnées peuvent être dans oeuvre.metadata OU directement dans oeuvre (après chargement)
+          const meta = oeuvre.metadata || {}
+          console.log(`📝 Sauvegarde œuvre: ${oeuvre.title}, artist: ${oeuvre.artist}, metadata:`, meta)
           
           await client.query(
             `INSERT INTO oeuvres (
@@ -110,22 +111,22 @@ export async function POST(request: NextRequest) {
               updated_at = CURRENT_TIMESTAMP`,
             [
               oeuvre.oeuvre_id,
-              oeuvre.title || metadata.title || '',
-              oeuvre.artist || metadata.artist || '',
-              oeuvre.description || metadata.description || '',
+              oeuvre.title || meta.title || '',
+              oeuvre.artist || meta.artist || '',
+              oeuvre.description || meta.description || '',
               oeuvre.image_link || null,
               oeuvre.pdf_path || oeuvre.pdf_link || null,
               oeuvre.pdf_path ? oeuvre.pdf_path.split('/').pop() : null,
               oeuvre.pdf_path || null,
               oeuvre.room,
-              metadata.date_oeuvre || null,
-              metadata.materiaux || null,
-              metadata.provenance || null,
-              metadata.contexte || null,
-              metadata.analyse || null,
-              metadata.iconographie || null,
-              metadata.reception || null,
-              metadata.parcours || null
+              meta.date_oeuvre || null,
+              meta.materiaux || meta.materiaux_technique || null,
+              meta.provenance || null,
+              meta.contexte || meta.contexte_commande || null,
+              meta.analyse || meta.analyse_materielle_technique || null,
+              meta.iconographie || meta.iconographie_symbolique || null,
+              meta.reception || meta.reception_circulation_posterite || null,
+              meta.parcours || meta.parcours_conservation_doc || null
             ]
           )
         }

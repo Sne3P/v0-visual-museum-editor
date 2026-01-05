@@ -107,8 +107,22 @@ export async function GET() {
             xy: artworkPoints.length > 0 ? [artworkPoints[0].x, artworkPoints[0].y] : [0, 0],
             size: metadata.size || [40, 40],
             name: oeuvre?.title || entity.name || 'Sans titre',
+            artist: oeuvre?.artist || 'Artiste inconnu',
             pdfPath: oeuvre?.file_path || oeuvre?.pdf_link || metadata.pdfPath || null,
-            roomId: metadata.roomId
+            roomId: metadata.roomId,
+            metadata: oeuvre ? {
+              title: oeuvre.title,
+              artist: oeuvre.artist,
+              description: oeuvre.description,
+              date_oeuvre: oeuvre.date_oeuvre,
+              materiaux: oeuvre.materiaux_technique,
+              provenance: oeuvre.provenance,
+              contexte: oeuvre.contexte_commande,
+              analyse: oeuvre.analyse_materielle_technique,
+              iconographie: oeuvre.iconographie_symbolique,
+              reception: oeuvre.reception_circulation_posterite,
+              parcours: oeuvre.parcours_conservation_doc
+            } : undefined
           }
         })
 
