@@ -735,15 +735,14 @@ def get_artwork_chunks_api(oeuvre_id):
 @app.route('/api/parcours/generate', methods=['POST'])
 def generate_intelligent_parcours():
     """
-    Génère un parcours intelligent optimisé
+    Génère un parcours intelligent optimisé basé sur une durée cible
     
     Body JSON:
     {
         "age_cible": "adulte",
         "thematique": "technique_picturale",
         "style_texte": "analyse",
-        "max_artworks": 10,  # Optionnel
-        "target_duration_minutes": 30,  # Optionnel
+        "target_duration_minutes": 60,  # 15-180 par paliers de 15min
         "variation_seed": 1234  # Optionnel (pour reproductibilité)
     }
     
@@ -754,24 +753,18 @@ def generate_intelligent_parcours():
             "parcours_id": "parcours_1234",
             "profil": {...},
             "metadata": {
-                "artwork_count": 10,
-                "total_distance_meters": 250.5,
-                "total_duration_minutes": 35,
-                "floors_visited": 2,
-                "rooms_visited": 5
-            },
-            "artworks": [
-                {
-                    "order": 1,
-                    "oeuvre_id": 42,
-                    "title": "...",
-                    "artist": "...",
-                    "position": {"x": 100, "y": 200, "room": 1, "floor": 0},
-                    "narration": "...",
-                    "distance_to_next": 45.2
+                "target_duration_minutes": 60,
+                "artwork_count": 8,
+                "total_distance_meters": 125.5,
+                "total_duration_minutes": 58,
+                "duration_breakdown": {
+                    "walking_minutes": 10.5,
+                    "narration_minutes": 38.2,
+                    "observation_minutes": 12.0
                 },
-                ...
-            ]
+                "artworks_detail": [...]
+            },
+            "artworks": [...]
         }
     }
     """
@@ -793,8 +786,7 @@ def generate_intelligent_parcours():
             }), 400
         
         # Paramètres optionnels
-        max_artworks = data.get('max_artworks', 10)
-        target_duration = data.get('target_duration_minutes')
+        target_duration = data.get('target_duration_minutes', 60)  # Défaut 1h
         variation_seed = data.get('variation_seed')
         
         # Générer le parcours
@@ -802,8 +794,7 @@ def generate_intelligent_parcours():
             age_cible=age_cible,
             thematique=thematique,
             style_texte=style_texte,
-            max_artworks=max_artworks,
-            target_duration=target_duration,
+            target_duration_minutes=target_duration,
             variation_seed=variation_seed
         )
         

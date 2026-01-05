@@ -394,10 +394,13 @@ class RoomGraph:
         self.walls: List[WallSegment] = []  # Murs bloquant les passages
         self.pathfinder: Optional[AStarPathfinder] = None
         self.room_bounds: Dict[int, Tuple[float, float, float, float]] = {}
+        self._accessible_rooms_cache: Optional[Set[int]] = None  # Cache des salles accessibles
     
     def add_door(self, door: Door):
         """Ajoute une porte au graphe"""
         self.doors.append(door)
+        # Invalider le cache d'accessibilité
+        self._accessible_rooms_cache = None
     
     def add_room_center(self, room_id: int, position: Position):
         """Enregistre le centre d'une salle"""
@@ -417,6 +420,63 @@ class RoomGraph:
         """Initialise le pathfinder si nécessaire"""
         if self.pathfinder is None:
             self.pathfinder = AStarPathfinder(self.walls, self.room_bounds)
+    
+    def get_accessible_rooms(self, start_room: Optional[int] = None) -> Set[int]:
+        """
+        Retourne l'ensemble des salles accessibles depuis start_room via les portes.
+        Si start_room est None, retourne toutes les salles connectées au plus grand composant.
+        
+        Utilise un BFS pour parcourir le graphe de portes.
+        """
+        if self._accessible_rooms_cache is not None and start_room is None:
+            return self._accessible_rooms_cache
+        
+        if not self.doors:
+            # Pas de portes = toutes les salles sont isolées
+            return set()
+        
+        # Construire le graphe d'adjacence
+        adjacency: Dict[int, Set[int]] = {}
+        for door in self.doors:
+            if door.room_a not in adjacency:
+                adjacency[door.room_a] = set()
+            if door.room_b not in adjacency:
+                adjacency[door.room_b] = set()
+            adjacency[door.room_a].add(door.room_b)
+            adjacency[door.room_b].add(door.room_a)
+        
+        if not adjacency:
+            return set()
+        
+        # Si pas de start_room, prendre la salle avec le plus de connexions
+        if start_room is None:
+            start_room = max(adjacency.keys(), key=lambda r: len(adjacency.get(r, [])))
+        
+        # BFS depuis start_room
+        visited = set()
+        queue = [start_room]
+        visited.add(start_room)
+        
+        while queue:
+            current = queue.pop(0)
+            for neighbor in adjacency.get(current, []):
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    queue.append(neighbor)
+        
+        # Mettre en cache si c'était un appel sans start_room
+        if start_room == max(adjacency.keys(), key=lambda r: len(adjacency.get(r, []))):
+            self._accessible_rooms_cache = visited
+        
+        return visited
+    
+    def is_room_accessible(self, room_id: int, from_room: Optional[int] = None) -> bool:
+        """
+        Vérifie si une salle est accessible depuis from_room.
+        Si from_room est None, vérifie si la salle est dans le composant principal.
+        """
+        accessible = self.get_accessible_rooms(from_room)
+        return room_id in accessible
     
     def calculate_room_path_distance(self, from_pos: Position, to_pos: Position) -> float:
         """
@@ -449,11 +509,15 @@ class IntelligentPathGenerator:
         self.conn = None
         self.room_graph = None  # Graphe des connexions entre salles
         
-        # Paramètres de génération
-        self.MIN_ARTWORKS = 5
-        self.MAX_ARTWORKS = 15
-        self.AVG_TIME_PER_ARTWORK = 3  # minutes
-        self.WALKING_SPEED = 1.2  # m/s
+        # Paramètres de génération basés sur le TEMPS
+        self.MIN_DURATION_MINUTES = 15
+        self.MAX_DURATION_MINUTES = 180  # 3 heures
+        self.DURATION_STEP_MINUTES = 15  # Paliers de 15 minutes
+        
+        # Paramètres de calcul de temps (scénario très tranquille)
+        self.WALKING_SPEED = 0.5  # m/s (marche lente, pauses fréquentes)
+        self.WORDS_PER_MINUTE = 90  # Débit d'écoute/prononciation posé
+        self.TIME_PER_ARTWORK_OBSERVATION = 2.0  # minutes (temps d'observation contemplative)
         
     def _get_connection(self):
         """Obtenir connexion PostgreSQL"""
@@ -621,23 +685,33 @@ class IntelligentPathGenerator:
                          age_cible: str,
                          thematique: str,
                          style_texte: str,
-                         max_artworks: Optional[int] = None,
-                         target_duration_minutes: Optional[int] = None,
+                         target_duration_minutes: int = 60,  # Par défaut 1h
                          variation_seed: Optional[int] = None) -> Parcours:
         """
-        Génère un parcours intelligent
+        Génère un parcours personnalisé et optimisé basé sur une durée cible
         
         Args:
-            age_cible: 'enfant', 'ado', 'adulte', 'senior'
-            thematique: 'technique_picturale', 'biographie', 'historique'
-            style_texte: 'analyse', 'decouverte', 'anecdote'
-            max_artworks: Nombre max d'œuvres (None = auto)
-            target_duration_minutes: Durée cible en minutes (None = auto)
-            variation_seed: Seed pour variations (None = aléatoire)
-        
-        Returns:
-            Parcours complet optimisé
+            age_cible: Âge du visiteur (enfant, ado, adulte, senior)
+            thematique: Thématique du parcours (technique_picturale, biographie, historique)
+            style_texte: Style narratif (analyse, decouverte, anecdote)
+            target_duration_minutes: Durée cible en minutes (15-180, paliers de 15min)
+            variation_seed: Seed pour reproductibilité (optionnel)
+            
+        Le système calcule:
+        - Temps de narration: longueur texte / 150 mots par minute
+        - Temps de marche: distance entre œuvres / 1.2 m/s
+        - Temps d'observation: 1.5 min par œuvre
+        - Sélectionne automatiquement le nombre d'œuvres pour respecter la durée cible
         """
+        
+        # Valider et arrondir la durée cible
+        if target_duration_minutes < self.MIN_DURATION_MINUTES:
+            target_duration_minutes = self.MIN_DURATION_MINUTES
+        if target_duration_minutes > self.MAX_DURATION_MINUTES:
+            target_duration_minutes = self.MAX_DURATION_MINUTES
+        
+        # Arrondir à un palier de 15 minutes
+        target_duration_minutes = round(target_duration_minutes / self.DURATION_STEP_MINUTES) * self.DURATION_STEP_MINUTES
         
         # Seed pour variations
         if variation_seed is None:
@@ -648,6 +722,7 @@ class IntelligentPathGenerator:
         print(f"🎯 GÉNÉRATION PARCOURS INTELLIGENT")
         print(f"{'='*80}")
         print(f"Profil: {age_cible} / {thematique} / {style_texte}")
+        print(f"Durée cible: {target_duration_minutes} minutes ({target_duration_minutes//60}h{target_duration_minutes%60:02d})")
         print(f"Seed variation: {variation_seed}")
         
         # 0. CHARGER LE GRAPHE DES SALLES ET PORTES
@@ -673,11 +748,12 @@ class IntelligentPathGenerator:
         
         print(f"📚 Œuvres disponibles: {len(artworks)}")
         
-        # 2. SÉLECTION INTELLIGENTE
-        selected = self._select_artworks_smart(
+        # 2. SÉLECTION INTELLIGENTE BASÉE SUR LA DURÉE (avec scoring profil)
+        selected = self._select_artworks_by_duration(
             artworks,
-            max_artworks or self.MAX_ARTWORKS,
-            target_duration_minutes
+            target_duration_minutes,
+            age_cible=age_cible,
+            thematique=thematique
         )
         
         print(f"✅ Œuvres sélectionnées: {len(selected)}")
@@ -687,9 +763,9 @@ class IntelligentPathGenerator:
         
         print(f"🗺️  Chemin optimisé: {len(optimized_path)} étapes")
         
-        # 4. CALCULER MÉTRIQUES
+        # 4. CALCULER MÉTRIQUES DÉTAILLÉES
         total_distance = self._calculate_total_distance(optimized_path)
-        total_duration = self._calculate_duration(optimized_path, total_distance)
+        duration_details = self._calculate_duration(optimized_path, total_distance)
         
         # 5. CONSTRUIRE LE PARCOURS FINAL
         parcours = Parcours(
@@ -701,19 +777,30 @@ class IntelligentPathGenerator:
             },
             artworks=optimized_path,
             total_distance=round(total_distance, 2),
-            total_duration_minutes=total_duration,
+            total_duration_minutes=duration_details['total_minutes'],
             path_order=[a.oeuvre_id for a in optimized_path],
             metadata={
                 'variation_seed': variation_seed,
+                'target_duration_minutes': target_duration_minutes,
                 'artwork_count': len(optimized_path),
                 'floors_visited': len(set(a.position.floor for a in optimized_path)),
-                'rooms_visited': len(set(a.room for a in optimized_path))
+                'rooms_visited': len(set(a.room for a in optimized_path)),
+                'duration_breakdown': {
+                    'walking_minutes': duration_details['walking_minutes'],
+                    'narration_minutes': duration_details['narration_minutes'],
+                    'observation_minutes': duration_details['observation_minutes']
+                },
+                'artworks_detail': duration_details['breakdown']
             }
         )
         
         print(f"\n📊 RÉSULTAT:")
+        print(f"   Œuvres: {parcours.metadata['artwork_count']}")
         print(f"   Distance totale: {parcours.total_distance}m")
-        print(f"   Durée estimée: {parcours.total_duration_minutes} minutes")
+        print(f"   Durée estimée: {parcours.total_duration_minutes} min (cible: {target_duration_minutes} min)")
+        print(f"     - Marche: {duration_details['walking_minutes']:.1f} min")
+        print(f"     - Narration: {duration_details['narration_minutes']:.1f} min")
+        print(f"     - Observation: {duration_details['observation_minutes']:.1f} min")
         print(f"   Étages visités: {parcours.metadata['floors_visited']}")
         print(f"   Salles visitées: {parcours.metadata['rooms_visited']}")
         print(f"{'='*80}\n")
@@ -779,6 +866,18 @@ class IntelligentPathGenerator:
                 room=row['room']
             ))
         
+        # FILTRER LES SALLES INACCESSIBLES (sans porte/connexion)
+        if self.room_graph and len(self.room_graph.doors) > 0:
+            accessible_rooms = self.room_graph.get_accessible_rooms()
+            before_filter = len(artworks)
+            artworks = [a for a in artworks if a.room in accessible_rooms]
+            filtered_count = before_filter - len(artworks)
+            
+            if filtered_count > 0:
+                print(f"⚠️  {filtered_count} œuvre(s) exclue(s) (salle(s) inaccessible(s) sans porte)")
+                print(f"   Salles accessibles: {sorted(accessible_rooms)}")
+                print(f"   Salles avec œuvres filtrées: {sorted(set(a.room for a in artworks if a.room not in accessible_rooms))}")
+        
         return artworks
     
     def _get_entity_position(self, cur, entity_id: int) -> Optional[Position]:
@@ -812,6 +911,104 @@ class IntelligentPathGenerator:
             )
         
         return None
+    
+    def _score_artwork_for_profile(self, artwork: Artwork, age_cible: str, thematique: str) -> float:
+        """
+        Score une œuvre selon sa pertinence pour le profil
+        Retourne un score 0.0-1.0 basé sur des keywords dans les métadonnées
+        """
+        score = 0.5  # Score de base
+        
+        # Keywords par thématique
+        theme_keywords = {
+            'technique_picturale': ['huile', 'acrylique', 'aquarelle', 'peinture', 'toile', 'technique', 'couleur'],
+            'biographie': ['autoportrait', 'portrait', 'vie', 'artiste', 'période'],
+            'historique': ['guerre', 'révolution', 'siècle', 'époque', 'histoire', 'politique']
+        }
+        
+        # Vérifier si les keywords de la thématique apparaissent
+        if thematique in theme_keywords:
+            text = f"{artwork.title} {artwork.materiaux_technique} {artwork.narration}".lower()
+            matches = sum(1 for kw in theme_keywords[thematique] if kw in text)
+            score += min(matches * 0.1, 0.3)  # +0.1 par match, max +0.3
+        
+        # Bonus pour certains âges (préférer œuvres plus colorées/narratives pour enfants)
+        if age_cible == 'enfant':
+            if any(word in artwork.title.lower() for word in ['couleur', 'animal', 'nature']):
+                score += 0.2
+        
+        return min(score, 1.0)
+    
+    def _select_artworks_by_duration(self, artworks: List[Artwork], target_duration_minutes: int, 
+                                     age_cible: str = None, thematique: str = None) -> List[Artwork]:
+        """
+        Sélectionne les œuvres pour atteindre la durée cible
+        Utilise un scoring basé sur le profil pour une sélection intelligente
+        
+        Calcule le temps pour chaque œuvre (narration + observation) et ajoute
+        progressivement des œuvres jusqu'à approcher la durée cible
+        """
+        
+        if not artworks:
+            return []
+        
+        # Scorer chaque œuvre selon le profil (si fourni)
+        if age_cible and thematique:
+            scored_artworks = [(a, self._score_artwork_for_profile(a, age_cible, thematique)) for a in artworks]
+            # Trier par score (meilleurs en premier) puis shuffle partiel pour variété
+            scored_artworks.sort(key=lambda x: x[1], reverse=True)
+            # Prendre les 60% meilleurs et shuffle parmi eux pour variété
+            top_60_percent = int(len(scored_artworks) * 0.6) or len(scored_artworks)
+            top_artworks = [a for a, s in scored_artworks[:top_60_percent]]
+            random.shuffle(top_artworks)
+            # Ajouter le reste shufflé
+            remaining = [a for a, s in scored_artworks[top_60_percent:]]
+            random.shuffle(remaining)
+            shuffled = top_artworks + remaining
+        else:
+            # Fallback: shuffle pur
+            shuffled = list(artworks)
+            random.shuffle(shuffled)
+        
+        selected = []
+        total_time = 0.0
+        
+        # Réserver du temps pour la marche (estimé à 20% du temps total)
+        target_content_time = target_duration_minutes * 0.8
+        
+        for artwork in shuffled:
+            # Calculer le temps pour cette œuvre
+            narration_time = len(artwork.narration.split()) / self.WORDS_PER_MINUTE
+            observation_time = self.TIME_PER_ARTWORK_OBSERVATION
+            artwork_time = narration_time + observation_time
+            
+            # Vérifier si on peut encore ajouter cette œuvre
+            if total_time + artwork_time <= target_content_time:
+                selected.append(artwork)
+                total_time += artwork_time
+            elif len(selected) == 0:
+                # Ajouter au moins une œuvre même si elle dépasse
+                selected.append(artwork)
+                break
+            else:
+                # On a assez d'œuvres
+                break
+        
+        # Si on n'a pas assez d'œuvres, prendre plus
+        if total_time < target_content_time * 0.5 and len(selected) < len(shuffled):
+            remaining = [a for a in shuffled if a not in selected]
+            for artwork in remaining:
+                narration_time = len(artwork.narration.split()) / self.WORDS_PER_MINUTE
+                observation_time = self.TIME_PER_ARTWORK_OBSERVATION
+                artwork_time = narration_time + observation_time
+                
+                if total_time + artwork_time <= target_duration_minutes * 0.9:
+                    selected.append(artwork)
+                    total_time += artwork_time
+                else:
+                    break
+        
+        return selected
     
     def _select_artworks_smart(self,
                               artworks: List[Artwork],
@@ -859,18 +1056,22 @@ class IntelligentPathGenerator:
     
     def _optimize_path(self, artworks: List[Artwork]) -> List[Artwork]:
         """
-        Optimise le chemin (Nearest Neighbor Algorithm)
+        Optimise le chemin (Nearest Neighbor Algorithm avec variation)
         Utilise le graphe des salles si disponible pour calculer la vraie distance
+        Ajoute de la variation en choisissant l'œuvre de départ aléatoirement
+        et en introduisant une randomisation dans le choix nearest neighbor
         """
         
         if len(artworks) <= 1:
             return artworks
         
-        # Départ: première œuvre aléatoire
-        path = [artworks[0]]
-        remaining = list(artworks[1:])
+        # Départ: œuvre aléatoire pour varier les parcours
+        start_artwork = random.choice(artworks)
+        path = [start_artwork]
+        remaining = [a for a in artworks if a != start_artwork]
         
         # Greedy nearest neighbor avec distance réelle via portes
+        # + variation: parfois choisir 2e ou 3e plus proche pour diversité
         while remaining:
             current = path[-1]
             
@@ -886,8 +1087,21 @@ class IntelligentPathGenerator:
                     # Fallback: distance euclidienne simple
                     return current.position.distance(artwork.position)
             
-            # Trouver la plus proche (en tenant compte des portes)
-            nearest = min(remaining, key=get_distance)
+            # Trier par distance
+            sorted_by_distance = sorted(remaining, key=get_distance)
+            
+            # 70% du temps: prendre la plus proche
+            # 20% du temps: prendre la 2e plus proche (si existe)
+            # 10% du temps: prendre la 3e plus proche (si existe)
+            rand = random.random()
+            if rand < 0.7 or len(sorted_by_distance) == 1:
+                nearest = sorted_by_distance[0]
+            elif rand < 0.9 and len(sorted_by_distance) >= 2:
+                nearest = sorted_by_distance[1]
+            elif len(sorted_by_distance) >= 3:
+                nearest = sorted_by_distance[2]
+            else:
+                nearest = sorted_by_distance[0]
             
             path.append(nearest)
             remaining.remove(nearest)
@@ -917,21 +1131,78 @@ class IntelligentPathGenerator:
         
         return total
     
-    def _calculate_duration(self, path: List[Artwork], distance: float) -> int:
+    def _calculate_duration(self, path: List[Artwork], distance: float) -> Dict:
         """
-        Calcule la durée totale estimée
-        = temps de marche + temps d'écoute des narrations
+        Calcule la durée totale détaillée du parcours
+        
+        Returns:
+            Dict avec:
+            - total_minutes: Durée totale
+            - walking_minutes: Temps de marche
+            - narration_minutes: Temps de narration
+            - observation_minutes: Temps d'observation
+            - breakdown: Détail par œuvre
         """
+        
+        if not path:
+            return {
+                'total_minutes': 0,
+                'walking_minutes': 0,
+                'narration_minutes': 0,
+                'observation_minutes': 0,
+                'breakdown': []
+            }
         
         # Temps de marche (distance en mètres / vitesse m/s / 60)
         walking_minutes = (distance / self.WALKING_SPEED) / 60
         
-        # Temps d'écoute (estimation: 150 mots/min en français)
-        listening_minutes = sum(
-            len(a.narration.split()) / 150 for a in path
+        # Temps de narration total
+        narration_minutes = sum(
+            len(a.narration.split()) / self.WORDS_PER_MINUTE for a in path
         )
         
-        return int(walking_minutes + listening_minutes + 0.5)  # Arrondi
+        # Temps d'observation
+        observation_minutes = len(path) * self.TIME_PER_ARTWORK_OBSERVATION
+        
+        # Total
+        total_minutes = walking_minutes + narration_minutes + observation_minutes
+        
+        # Détail par œuvre
+        breakdown = []
+        for i, artwork in enumerate(path):
+            artwork_narration_time = len(artwork.narration.split()) / self.WORDS_PER_MINUTE
+            
+            # Distance vers la prochaine œuvre
+            if i < len(path) - 1:
+                if self.room_graph and len(self.room_graph.doors) > 0:
+                    dist_to_next = self.room_graph.calculate_room_path_distance(
+                        artwork.position,
+                        path[i + 1].position
+                    )
+                else:
+                    dist_to_next = artwork.position.distance(path[i + 1].position)
+                walking_to_next = (dist_to_next / self.WALKING_SPEED) / 60
+            else:
+                dist_to_next = 0
+                walking_to_next = 0
+            
+            breakdown.append({
+                'oeuvre_id': artwork.oeuvre_id,
+                'title': artwork.title,
+                'narration_minutes': round(artwork_narration_time, 2),
+                'observation_minutes': self.TIME_PER_ARTWORK_OBSERVATION,
+                'walking_to_next_minutes': round(walking_to_next, 2),
+                'distance_to_next_meters': round(dist_to_next, 2),
+                'subtotal_minutes': round(artwork_narration_time + self.TIME_PER_ARTWORK_OBSERVATION + walking_to_next, 2)
+            })
+        
+        return {
+            'total_minutes': int(total_minutes + 0.5),  # Arrondi
+            'walking_minutes': round(walking_minutes, 2),
+            'narration_minutes': round(narration_minutes, 2),
+            'observation_minutes': round(observation_minutes, 2),
+            'breakdown': breakdown
+        }
     
     def export_to_json(self, parcours: Parcours) -> Dict:
         """
@@ -993,14 +1264,20 @@ class IntelligentPathGenerator:
 def generer_parcours_intelligent(age_cible: str,
                                  thematique: str,
                                  style_texte: str,
-                                 max_artworks: int = 10,
-                                 target_duration: Optional[int] = None,
+                                 target_duration_minutes: int = 60,
                                  variation_seed: Optional[int] = None) -> Dict:
     """
-    Fonction helper pour générer un parcours
+    Fonction helper pour générer un parcours intelligent basé sur une durée cible
+    
+    Args:
+        age_cible: Âge cible du public
+        thematique: Thématique du parcours
+        style_texte: Style des narrations
+        target_duration_minutes: Durée cible en minutes (15-180, paliers de 15min)
+        variation_seed: Seed optionnel pour la génération
     
     Returns:
-        Dict JSON du parcours complet
+        Dict JSON du parcours complet avec duration_breakdown
     """
     
     generator = IntelligentPathGenerator()
@@ -1010,8 +1287,7 @@ def generer_parcours_intelligent(age_cible: str,
             age_cible=age_cible,
             thematique=thematique,
             style_texte=style_texte,
-            max_artworks=max_artworks,
-            target_duration_minutes=target_duration,
+            target_duration_minutes=target_duration_minutes,
             variation_seed=variation_seed
         )
         

@@ -66,6 +66,24 @@ export async function POST(request: NextRequest) {
       // First, remove oeuvre_id from entities to break FK cascade
       await client.query('UPDATE entities SET oeuvre_id = NULL WHERE oeuvre_id IS NOT NULL')
       
+      // Delete orphaned oeuvres (created but never saved to plan)
+      // BUT keep oeuvres with pregenerations (expensive LLM content)
+      const orphansResult = await client.query(`
+        DELETE FROM oeuvres
+        WHERE oeuvre_id NOT IN (
+          SELECT DISTINCT oeuvre_id FROM entities WHERE oeuvre_id IS NOT NULL
+        )
+        AND oeuvre_id NOT IN (
+          SELECT DISTINCT oeuvre_id FROM pregenerations WHERE oeuvre_id IS NOT NULL
+        )
+        RETURNING oeuvre_id, title
+      `)
+      
+      if (orphansResult.rows.length > 0) {
+        console.log(`🗑️  Suppression ${orphansResult.rows.length} oeuvre(s) orpheline(s):`,
+          orphansResult.rows.map((r: any) => r.title).join(', '))
+      }
+      
       // Now truncate plan geometry safely
       await client.query('TRUNCATE TABLE points, relations, entities, plans, chunk CASCADE')
 

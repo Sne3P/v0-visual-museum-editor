@@ -37,6 +37,20 @@ interface ParcoursResult {
     total_duration_minutes: number
     floors_visited: number
     rooms_visited: number
+    target_duration_minutes?: number
+    duration_breakdown?: {
+      total_minutes: number
+      walking_minutes: number
+      narration_minutes: number
+      observation_minutes: number
+      breakdown: Array<{
+        oeuvre_id: number
+        title: string
+        narration_minutes: number
+        observation_minutes: number
+        walking_to_next_minutes: number
+      }>
+    }
   }
   artworks: ParcoursArtwork[]
 }
@@ -50,7 +64,7 @@ export default function TestParcoursPage() {
   const [ageCible, setAgeCible] = useState('adulte')
   const [thematique, setThematique] = useState('technique_picturale')
   const [styleTexte, setStyleTexte] = useState('analyse')
-  const [maxArtworks, setMaxArtworks] = useState(10)
+  const [targetDuration, setTargetDuration] = useState(60) // Durée cible en minutes
 
   const ageOptions = [
     { value: 'enfant', label: '👶 Enfant (6-10 ans)' },
@@ -86,7 +100,7 @@ export default function TestParcoursPage() {
           age_cible: ageCible,
           thematique: thematique,
           style_texte: styleTexte,
-          max_artworks: maxArtworks
+          target_duration_minutes: targetDuration
         })
       })
 
@@ -188,20 +202,24 @@ export default function TestParcoursPage() {
                 </div>
               </div>
 
-              {/* Nombre max */}
+              {/* Durée cible */}
               <div>
-                <Label htmlFor="maxArtworks" className="mb-2 block">
-                  Nombre Max d&apos;Œuvres
+                <Label htmlFor="targetDuration" className="mb-2 block">
+                  ⏱️ Durée Cible (minutes)
                 </Label>
-                <input
-                  id="maxArtworks"
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={maxArtworks}
-                  onChange={(e) => setMaxArtworks(parseInt(e.target.value))}
+                <select
+                  id="targetDuration"
+                  value={targetDuration}
+                  onChange={(e) => setTargetDuration(parseInt(e.target.value))}
                   className="w-full px-3 py-2 border rounded-md"
-                />
+                >
+                  {[15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180].map(duration => (
+                    <option key={duration} value={duration}>
+                      {duration} min {duration >= 60 ? `(${(duration / 60).toFixed(1)}h)` : ''}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">Paliers de 15 minutes</p>
               </div>
             </div>
 
@@ -237,7 +255,7 @@ export default function TestParcoursPage() {
                 <CardTitle>📊 Résumé du Parcours</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
                   <div className="text-center p-4 bg-blue-50 rounded-lg">
                     <div className="text-2xl font-bold text-blue-600">
                       {parcours.metadata.artwork_count}
@@ -254,7 +272,7 @@ export default function TestParcoursPage() {
                     <div className="text-2xl font-bold text-purple-600">
                       {parcours.metadata.total_duration_minutes} min
                     </div>
-                    <div className="text-sm text-gray-600">Durée</div>
+                    <div className="text-sm text-gray-600">Durée Totale</div>
                   </div>
                   <div className="text-center p-4 bg-orange-50 rounded-lg">
                     <div className="text-2xl font-bold text-orange-600">
@@ -269,6 +287,41 @@ export default function TestParcoursPage() {
                     <div className="text-sm text-gray-600">Salles</div>
                   </div>
                 </div>
+
+                {/* Détail des temps */}
+                {parcours.metadata.duration_breakdown && (
+                  <div className="border-t pt-6">
+                    <h4 className="font-semibold mb-4 flex items-center gap-2">
+                      <Clock className="h-5 w-5" />
+                      Décomposition du Temps
+                      {parcours.metadata.target_duration_minutes && (
+                        <span className="text-sm text-gray-600 font-normal">
+                          (Cible: {parcours.metadata.target_duration_minutes} min)
+                        </span>
+                      )}
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-3 bg-blue-100 rounded-lg">
+                        <div className="text-lg font-bold text-blue-800">
+                          {parcours.metadata.duration_breakdown.walking_minutes.toFixed(1)} min
+                        </div>
+                        <div className="text-sm text-blue-600">🚶 Marche (0.8 m/s)</div>
+                      </div>
+                      <div className="p-3 bg-green-100 rounded-lg">
+                        <div className="text-lg font-bold text-green-800">
+                          {parcours.metadata.duration_breakdown.narration_minutes.toFixed(1)} min
+                        </div>
+                        <div className="text-sm text-green-600">🎧 Narration (120 mots/min)</div>
+                      </div>
+                      <div className="p-3 bg-purple-100 rounded-lg">
+                        <div className="text-lg font-bold text-purple-800">
+                          {parcours.metadata.duration_breakdown.observation_minutes.toFixed(1)} min
+                        </div>
+                        <div className="text-sm text-purple-600">👁️ Observation (2 min/œuvre)</div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -279,7 +332,9 @@ export default function TestParcoursPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {parcours.artworks.map((artwork, idx) => (
+                  {parcours.artworks.map((artwork, idx) => {
+                    const detail = parcours.metadata.duration_breakdown?.breakdown?.[idx]
+                    return (
                     <div key={artwork.oeuvre_id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
@@ -302,7 +357,27 @@ export default function TestParcoursPage() {
                               <Clock className="h-4 w-4" />
                               {artwork.narration_word_count} mots
                             </div>
+                            {detail && (
+                              <div className="flex items-center gap-1 text-purple-600 font-medium">
+                                ⏱️ {(
+                                  detail.narration_minutes +
+                                  detail.observation_minutes +
+                                  (detail.walking_to_next_minutes || 0)
+                                ).toFixed(1)} min
+                              </div>
+                            )}
                           </div>
+
+                          {/* Détail temps par œuvre */}
+                          {detail && (
+                            <div className="mb-3 p-2 bg-gray-50 rounded text-xs text-gray-600 flex gap-3">
+                              <span>🎧 Narr: {detail.narration_minutes.toFixed(1)}min</span>
+                              <span>👁️ Obs: {detail.observation_minutes.toFixed(1)}min</span>
+                              {detail.walking_to_next_minutes > 0 && (
+                                <span>🚶 Marche: {detail.walking_to_next_minutes.toFixed(1)}min</span>
+                              )}
+                            </div>
+                          )}
 
                           <p className="text-sm text-gray-700 line-clamp-2">
                             {artwork.narration.substring(0, 150)}...
@@ -326,7 +401,7 @@ export default function TestParcoursPage() {
                         </div>
                       )}
                     </div>
-                  ))}
+                    )})}
                 </div>
               </CardContent>
             </Card>
