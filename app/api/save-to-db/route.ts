@@ -85,7 +85,8 @@ export async function POST(request: NextRequest) {
       }
       
       // Now truncate plan geometry safely
-      await client.query('TRUNCATE TABLE points, relations, entities, plans, chunk CASCADE')
+      // NOTE: Chunks NOT truncated here - managed by force_regenerate during narration generation
+      await client.query('TRUNCATE TABLE points, relations, entities, plans CASCADE')
 
       // Insert plans
       for (const plan of exportData.plan_editor.plans) {
@@ -188,15 +189,9 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Insert chunks
-      if (exportData.oeuvres_contenus?.chunks) {
-        for (const chunk of exportData.oeuvres_contenus.chunks) {
-          await client.query(
-            'INSERT INTO chunk (chunk_id, chunk_text, oeuvre_id) VALUES ($1, $2, $3)',
-            [chunk.chunk_id, chunk.chunk_text, chunk.oeuvre_id]
-          )
-        }
-      }
+      // Chunks are created by backend during PDF extraction (extract-pdf-metadata)
+      // NOT saved from frontend to avoid polluting database with empty chunks
+      // The RAG pipeline handles: PDF → chunks → embeddings → FAISS index
 
       await client.query('COMMIT')
       

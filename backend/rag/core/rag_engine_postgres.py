@@ -136,6 +136,7 @@ class PostgresRAGEngine:
             conn.commit()
             
             return {
+                'success': True,
                 'oeuvre_id': oeuvre_id,
                 'chunks_processed': len(chunks),
                 'embeddings_created': embeddings_created,
@@ -206,8 +207,10 @@ class PostgresRAGEngine:
                 pickle.dump(chunk_mapping, f)
             
             return {
+                'success': True,
                 'oeuvre_id': oeuvre_id,
                 'index_size': len(chunk_ids),
+                'chunks_indexed': len(chunk_ids),
                 'dimension': dimension,
                 'index_file': str(index_file),
                 'mapping_file': str(mapping_file)

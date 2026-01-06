@@ -1,16 +1,19 @@
 #!/usr/bin/env python3
 """
-Système COMPLET de prégénération avec Ollama
-Flux: Chunks → Embeddings → FAISS → RAG → Ollama → Narrations uniques
+Système COMPLET de prégénération avec Ollama FACTUEL
+Flux: Chunks → Embeddings → FAISS → RAG → Ollama Factuel → Narrations uniques
+OPTIMISÉ: Parallélisation multi-cœurs avec ThreadPoolExecutor
 """
 
 import sys
 import time
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing
 
 # Imports relatifs au package rag
-from rag.core.ollama_generator import get_ollama_generator
+from rag.core.ollama_generator_improved import get_factual_generator as get_ollama_generator
 from rag.core.rag_engine_postgres import get_rag_engine
 from rag.core.db_postgres import get_artwork, get_all_artworks, get_artwork_chunks
 from rag.core.pregeneration_db import add_pregeneration
@@ -88,8 +91,8 @@ class OllamaPregenerationSystem:
         rag_context = self._build_artwork_rag_context(oeuvre_id, chunks)
         print(f"   Contexte RAG: {len(rag_context)} caractères")
         
-        # 4. GÉNÉRATION DES 36 NARRATIONS
-        print("\n🤖 ÉTAPE 3/3: Génération Ollama (36 narrations)")
+        # 4. GÉNÉRATION DES 36 NARRATIONS SÉQUENTIEL OPTIMISÉ
+        print(f"\n🤖 ÉTAPE 3/3: Génération Ollama SÉQUENTIEL (36 narrations, CPU max)")
         
         stats = {
             'generated': 0,
@@ -113,10 +116,10 @@ class OllamaPregenerationSystem:
                             stats['skipped'] += 1
                             continue
                     
-                    print(f"   [{current}/{total_combinations}] {age}-{theme}-{style}...", end=' ')
+                    print(f"   [{current}/{total_combinations}] {age}-{theme}-{style}...", end=' ', flush=True)
                     
                     try:
-                        # GÉNÉRATION AVEC OLLAMA
+                        # GÉNÉRATION AVEC OLLAMA (toutes ressources CPU)
                         narration = self.ollama_gen.generate_narration(
                             artwork=artwork,
                             chunks=chunks,
@@ -143,16 +146,16 @@ class OllamaPregenerationSystem:
                         if pregen_id:
                             if force_regenerate:
                                 stats['updated'] += 1
-                                print(f"✅ Mis à jour (ID: {pregen_id})")
+                                print(f"✅ MAJ (ID: {pregen_id})")
                             else:
                                 stats['generated'] += 1
-                                print(f"✨ Créé (ID: {pregen_id})")
+                                print(f"✨ OK (ID: {pregen_id})")
                         else:
                             stats['errors'] += 1
-                            print("❌ Erreur save")
+                            print("❌ Save")
                         
                     except Exception as e:
-                        print(f"❌ Erreur: {e}")
+                        print(f"❌ {str(e)[:50]}")
                         stats['errors'] += 1
         
         # RÉSUMÉ
@@ -305,11 +308,24 @@ class OllamaPregenerationSystem:
     def _setup_rag_for_artwork(self, oeuvre_id: int) -> Dict[str, Any]:
         """
         Setup complet RAG pour une œuvre:
+        0. Créer chunks sémantiques
         1. Créer embeddings
         2. Construire index FAISS
         """
         
         try:
+            # 0. Créer chunks d'abord!
+            from rag.traitement.chunk_creator_postgres import process_artwork_chunks
+            
+            print("   0️⃣  Création chunks...", end=' ')
+            chunk_result = process_artwork_chunks(oeuvre_id)
+            
+            if not chunk_result.get('success'):
+                print(f"❌ {chunk_result.get('error')}")
+                return {'success': False, 'error': 'Échec création chunks'}
+            
+            print(f"✅ {chunk_result.get('chunks_created', 0)} chunks créés")
+            
             # 1. Créer embeddings
             print("   1️⃣  Création embeddings...", end=' ')
             emb_result = self.rag_engine.create_embeddings_for_artwork(oeuvre_id)
@@ -414,6 +430,49 @@ class OllamaPregenerationSystem:
         
         return ""
     
+    def _generate_single_narration(self, oeuvre_id: int, artwork: Dict, chunks: List[Dict],
+                                   rag_context: str, age: str, theme: str, style: str,
+                                   force_regenerate: bool) -> Dict[str, Any]:
+        """
+        Génère UNE narration (thread-safe pour parallélisation)
+        Retourne: {'success': bool, 'action': 'generated'|'updated', 'pregen_id': int}
+        """
+        try:
+            # GÉNÉRATION AVEC OLLAMA
+            narration = self.ollama_gen.generate_narration(
+                artwork=artwork,
+                chunks=chunks,
+                rag_context=rag_context,
+                age_cible=age,
+                thematique=theme,
+                style_texte=style
+            )
+            
+            if not narration or len(narration) < 30:
+                return {'success': False, 'error': 'Narration vide ou trop courte'}
+            
+            # SAUVEGARDER (thread-safe car PostgreSQL gère concurrence)
+            pregen_id = add_pregeneration(
+                oeuvre_id=oeuvre_id,
+                age_cible=age,
+                thematique=theme,
+                style_texte=style,
+                pregeneration_text=narration
+            )
+            
+            if pregen_id:
+                action = 'updated' if force_regenerate else 'generated'
+                return {
+                    'success': True,
+                    'action': action,
+                    'pregen_id': pregen_id
+                }
+            else:
+                return {'success': False, 'error': 'Échec sauvegarde BDD'}
+                
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+    
     def _check_existing(self, oeuvre_id: int, age: str, theme: str, style: str) -> bool:
         """Vérifie si une prégénération existe"""
         try:
@@ -422,7 +481,7 @@ class OllamaPregenerationSystem:
             cur = conn.cursor()
             
             cur.execute("""
-                SELECT 1 FROM pregeneration 
+                SELECT 1 FROM pregenerations 
                 WHERE oeuvre_id = %s AND age_cible = %s 
                 AND thematique = %s AND style_texte = %s
             """, (oeuvre_id, age, theme, style))

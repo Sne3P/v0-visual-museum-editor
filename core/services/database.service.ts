@@ -72,11 +72,7 @@ interface ExportData {
   }
   oeuvres_contenus: {
     oeuvres: ExportOeuvre[]
-    chunks: Array<{
-      chunk_id: number
-      chunk_text: string
-      oeuvre_id: number
-    }>
+    // Chunks removed - created by backend during PDF extraction
   }
   temp_pdfs: Array<{
     filename: string
@@ -101,7 +97,7 @@ export function convertStateToExportData(state: EditorState): ExportData {
   let pointIdCounter = 1
   let relationIdCounter = 1
   let oeuvreIdCounter = 1
-  let chunkIdCounter = 1
+  // chunkIdCounter removed - chunks created by backend
 
   // Plans (1 par floor)
   const plans = state.floors.map((floor, index) => ({
@@ -114,7 +110,7 @@ export function convertStateToExportData(state: EditorState): ExportData {
   const entities: ExportEntity[] = []
   const points: ExportPoint[] = []
   const oeuvres: ExportOeuvre[] = []
-  const chunks: any[] = []
+  // chunks removed - created by backend during PDF processing
   const relations: any[] = []
   const tempPdfs: Array<{ filename: string; base64: string }> = []
   
@@ -275,14 +271,9 @@ export function convertStateToExportData(state: EditorState): ExportData {
         ordre: 4
       })
 
-      // Chunks (texte associé)
-      if (artwork.name) {
-        chunks.push({
-          chunk_id: chunkIdCounter++,
-          chunk_text: artwork.name,
-          oeuvre_id: oeuvreId
-        })
-      }
+      // NOTE: Les chunks RAG sont créés par le backend lors de l'upload du PDF
+      // via /api/extract-pdf-metadata qui traite le PDF et crée chunks + embeddings
+      // Ne PAS créer de chunks vides ici - cela pollue la base de données
     })
 
     // DOORS
@@ -482,8 +473,8 @@ export function convertStateToExportData(state: EditorState): ExportData {
       relations
     },
     oeuvres_contenus: {
-      oeuvres,
-      chunks
+      oeuvres
+      // Chunks created by backend during PDF extraction
     },
     temp_pdfs: tempPdfs,
     criterias_guides: {

@@ -18,7 +18,8 @@ from core.db_postgres import get_artwork, _connect_postgres
 
 def create_chunks_for_artwork(oeuvre_id: int) -> List[Tuple[str, int]]:
     """
-    Crée des chunks sémantiques à partir des métadonnées de l'œuvre
+    Crée des chunks sémantiques OPTIMISÉS à partir des métadonnées de l'œuvre
+    Structure les chunks pour meilleure pertinence RAG par thématique
     Retourne: List[(chunk_text, chunk_index)]
     """
     
@@ -30,11 +31,12 @@ def create_chunks_for_artwork(oeuvre_id: int) -> List[Tuple[str, int]]:
     chunks = []
     index = 0
     
-    # CHUNK 1: Métadonnées principales (titre, artiste, date, matériaux)
-    metadata_chunk = f"""Titre : {artwork.get('title', 'Sans titre')}
+    # CHUNK 0: MÉTADONNÉES ESSENTIELLES (toujours présent, prioritaire)
+    metadata_chunk = f"""RÉFÉRENCE ŒUVRE
+Titre : {artwork.get('title', 'Sans titre')}
 Artiste : {artwork.get('artist', 'Artiste inconnu')}
-Date de création : {artwork.get('date_oeuvre', 'Non renseignée')}
-Technique et matériaux : {artwork.get('materiaux_technique', 'Non renseigné')}"""
+Date : {artwork.get('date_oeuvre', 'Non renseignée')}
+Technique : {artwork.get('materiaux_technique', 'Non renseignée')}"""
     
     if artwork.get('dimensions'):
         metadata_chunk += f"\nDimensions : {artwork['dimensions']}"
@@ -42,56 +44,66 @@ Technique et matériaux : {artwork.get('materiaux_technique', 'Non renseigné')}
     chunks.append((metadata_chunk, index))
     index += 1
     
-    # CHUNK 2: Description générale de l'œuvre
-    if artwork.get('description') and len(artwork['description']) > 50:
-        description_chunk = f"""Description de l'œuvre :
-{artwork['description']}"""
-        chunks.append((description_chunk, index))
-        index += 1
-    
-    # CHUNK 3: Contexte de commande et historique
-    if artwork.get('contexte_commande') and len(artwork['contexte_commande']) > 50:
-        context_chunk = f"""Contexte historique et commande :
-{artwork['contexte_commande']}"""
+    # CHUNK 1: CONTEXTE HISTORIQUE & COMMANDE (thématique: historique)
+    if artwork.get('contexte_commande') and len(artwork['contexte_commande']) > 80:
+        context_chunk = f"""CONTEXTE HISTORIQUE ET COMMANDE
+{artwork['contexte_commande'][:1200]}"""  # Limiter à 1200 chars max
         chunks.append((context_chunk, index))
         index += 1
     
-    # CHUNK 4: Analyse matérielle et technique
-    if artwork.get('analyse_materielle_technique') and len(artwork['analyse_materielle_technique']) > 50:
-        technique_chunk = f"""Analyse technique et matérielle :
-{artwork['analyse_materielle_technique']}"""
+    # CHUNK 2: DESCRIPTION & CONTEXTE ARTISTIQUE (thématique: biographie)
+    if artwork.get('description') and len(artwork['description']) > 80:
+        desc_chunk = f"""DESCRIPTION ET CONTEXTE ARTISTIQUE
+{artwork['description'][:1200]}"""
+        chunks.append((desc_chunk, index))
+        index += 1
+    
+    # CHUNK 3: ANALYSE TECHNIQUE & MATÉRIELLE (thématique: technique_picturale)
+    if artwork.get('analyse_materielle_technique') and len(artwork['analyse_materielle_technique']) > 80:
+        technique_chunk = f"""ANALYSE TECHNIQUE ET MATÉRIELLE
+Technique : {artwork.get('materiaux_technique', 'Non spécifiée')}
+
+{artwork['analyse_materielle_technique'][:1200]}"""
         chunks.append((technique_chunk, index))
         index += 1
     
-    # CHUNK 5: Iconographie et symbolique
-    if artwork.get('iconographie_symbolique') and len(artwork['iconographie_symbolique']) > 50:
-        iconography_chunk = f"""Iconographie et interprétation symbolique :
-{artwork['iconographie_symbolique']}"""
+    # CHUNK 4: ICONOGRAPHIE & SYMBOLIQUE (utile pour toutes thématiques)
+    if artwork.get('iconographie_symbolique') and len(artwork['iconographie_symbolique']) > 80:
+        iconography_chunk = f"""ICONOGRAPHIE ET SYMBOLIQUE
+{artwork['iconographie_symbolique'][:1200]}"""
         chunks.append((iconography_chunk, index))
         index += 1
     
-    # CHUNK 6: Réception, circulation et postérité
-    if artwork.get('reception_circulation_posterite') and len(artwork['reception_circulation_posterite']) > 50:
-        reception_chunk = f"""Réception critique et postérité :
-{artwork['reception_circulation_posterite']}"""
+    # CHUNK 5: RÉCEPTION & POSTÉRITÉ (thématique: historique)
+    if artwork.get('reception_circulation_posterite') and len(artwork['reception_circulation_posterite']) > 80:
+        reception_chunk = f"""RÉCEPTION CRITIQUE ET POSTÉRITÉ
+{artwork['reception_circulation_posterite'][:1200]}"""
         chunks.append((reception_chunk, index))
         index += 1
     
-    # CHUNK 7: Parcours, conservation et documentation
-    if artwork.get('parcours_conservation_doc') and len(artwork['parcours_conservation_doc']) > 50:
-        conservation_chunk = f"""Conservation et documentation :
-{artwork['parcours_conservation_doc']}"""
+    # CHUNK 6: CONSERVATION & PARCOURS (info générale)
+    if artwork.get('parcours_conservation_doc') and len(artwork['parcours_conservation_doc']) > 80:
+        conservation_chunk = f"""CONSERVATION ET DOCUMENTATION
+{artwork['parcours_conservation_doc'][:1200]}"""
         chunks.append((conservation_chunk, index))
         index += 1
     
-    # CHUNK 8: Provenance
-    if artwork.get('provenance') and len(artwork['provenance']) > 20:
-        provenance_chunk = f"""Provenance de l'œuvre :
-{artwork['provenance']}"""
+    # CHUNK 7: PROVENANCE (important pour contexte)
+    if artwork.get('provenance') and len(artwork['provenance']) > 50:
+        provenance_chunk = f"""PROVENANCE DE L'ŒUVRE
+{artwork['provenance'][:800]}"""
         chunks.append((provenance_chunk, index))
         index += 1
     
-    print(f"✅ {len(chunks)} chunks créés pour l'œuvre {oeuvre_id}")
+    if not chunks or len(chunks) < 2:
+        # Fallback: créer au minimum 2 chunks
+        print(f"⚠️  Chunks minimal pour {oeuvre_id}")
+        chunks = [
+            (f"RÉFÉRENCE\nTitre : {artwork.get('title', 'Sans titre')}\nArtiste : {artwork.get('artist', 'Inconnu')}", 0),
+            (f"CONTEXTE\nDate : {artwork.get('date_oeuvre', 'Inconnue')}", 1)
+        ]
+    
+    print(f"✅ {len(chunks)} chunks créés pour l'œuvre {oeuvre_id} ({artwork.get('title', '')})")
     return chunks
 
 
