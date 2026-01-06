@@ -62,3 +62,16 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+# Uploads (images thématiques, PDFs, etc.)
+/public/uploads/themes/
+/public/uploads/*.pdf
+/public/uploads/*.jpg
+/public/uploads/*.jpeg
+/public/uploads/*.png
+/public/uploads/*.gif
+/public/uploads/*.webp
+
+# Keep directory structure
+!/public/uploads/.gitkeep
+!/public/uploads/themes/.gitkeep

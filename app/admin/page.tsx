@@ -127,10 +127,13 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 <CardDescription className="mb-4">
-                  Gérer les thématiques du musée (peinture, contemporain, sculpture, etc.)
+                  Gérer les centres d'intérêts et mouvements artistiques du musée
                 </CardDescription>
-                <Button variant="outline" className="w-full" disabled>
-                  Bientôt disponible
+                <Button 
+                  onClick={() => router.push('/admin/thematiques')} 
+                  className="w-full"
+                >
+                  Gérer les thématiques
                 </Button>
               </CardContent>
             </Card>
@@ -209,10 +212,13 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent>
                 <CardDescription className="mb-4">
-                  Configurer les paramètres globaux de l'application
+                  Nom du musée, horaires d'ouverture et paramètres globaux
                 </CardDescription>
-                <Button variant="outline" className="w-full" disabled>
-                  Bientôt disponible
+                <Button 
+                  onClick={() => router.push('/admin/settings')} 
+                  className="w-full"
+                >
+                  Configurer les paramètres
                 </Button>
               </CardContent>
             </Card>
