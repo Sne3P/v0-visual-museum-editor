@@ -3,6 +3,7 @@
  */
 
 export interface ThemeItem {
+  id?: number
   name: string
   description?: string
   aiIndication?: string

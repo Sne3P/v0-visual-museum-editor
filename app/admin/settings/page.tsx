@@ -58,36 +58,11 @@ export default function SystemSettingsPage() {
 
   const loadSettings = async () => {
     try {
-      const response = await fetch('/api/museum-settings')
+      const response = await fetch('/api/museum-info')
       if (response.ok) {
         const data = await response.json()
-        setSettings(data)
-        
-        // Extraire les valeurs spécifiques
-        data.forEach((setting: MuseumSetting) => {
-          switch (setting.setting_key) {
-            case 'museum_name':
-              setMuseumName(setting.setting_value)
-              break
-            case 'opening_hours':
-              setOpeningHours(setting.setting_value)
-              break
-            case 'centres_interets':
-              try {
-                setCentresInterets(Array.isArray(setting.setting_value) ? setting.setting_value : JSON.parse(setting.setting_value))
-              } catch {
-                setCentresInterets([])
-              }
-              break
-            case 'mouvements_preferes':
-              try {
-                setMouvementsPreferes(Array.isArray(setting.setting_value) ? setting.setting_value : JSON.parse(setting.setting_value))
-              } catch {
-                setMouvementsPreferes([])
-              }
-              break
-          }
-        })
+        if (data.museum_name) setMuseumName(data.museum_name)
+        if (data.opening_hours) setOpeningHours(data.opening_hours)
       }
     } catch (error) {
       console.error('Erreur lors du chargement des paramètres:', error)
@@ -98,22 +73,24 @@ export default function SystemSettingsPage() {
   const handleSaveMuseumName = async () => {
     setIsSaving(true)
     try {
-      const response = await fetch('/api/museum-settings', {
+      const response = await fetch('/api/museum-info', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          setting_key: 'museum_name',
-          setting_value: museumName,
+          museum_name: museumName,
         }),
       })
 
       if (response.ok) {
-        console.log('Nom du musée sauvegardé')
+        alert('Nom du musée sauvegardé avec succès!')
+      } else {
+        alert('Erreur lors de la sauvegarde')
       }
     } catch (error) {
       console.error('Erreur lors de la sauvegarde:', error)
+      alert('Erreur de connexion')
     }
     setIsSaving(false)
   }
@@ -121,26 +98,19 @@ export default function SystemSettingsPage() {
   const handleSaveOpeningHours = async () => {
     setIsSaving(true)
     try {
-      console.log('Sauvegarde des horaires:', openingHours)
-      
-      const response = await fetch('/api/museum-settings', {
+      const response = await fetch('/api/museum-info', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          setting_key: 'opening_hours',
-          setting_value: openingHours,
+          opening_hours: openingHours,
         }),
       })
 
       if (response.ok) {
-        const result = await response.json()
-        console.log('Horaires sauvegardés avec succès:', result)
         alert('Horaires d\'ouverture sauvegardés avec succès!')
       } else {
-        const error = await response.text()
-        console.error('Erreur API:', error)
         alert('Erreur lors de la sauvegarde des horaires')
       }
     } catch (error) {
@@ -150,16 +120,14 @@ export default function SystemSettingsPage() {
     setIsSaving(false)
   }
 
-
-
   const updateOpeningHours = (day: string, field: 'open' | 'close' | 'closed', value: string | boolean) => {
     setOpeningHours(prev => ({
       ...prev,
       [day]: {
+        ...prev[day],
         open: prev[day]?.open || '09:00',
         close: prev[day]?.close || '18:00',
         closed: prev[day]?.closed || false,
-        ...prev[day],
         [field]: value
       }
     }))

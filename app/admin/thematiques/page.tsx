@@ -67,86 +67,57 @@ export default function ThematiquesPage() {
 
   const loadThemes = async () => {
     try {
-      const response = await fetch('/api/museum-settings')
-      if (!response.ok) throw new Error('Erreur lors du chargement')
-      
-      const settings: MuseumSetting[] = await response.json()
-      
-      // Charger l'image principale
-      const mainImageData = settings.find(s => s.setting_key === 'main_image')
-      if (mainImageData?.setting_value) {
-        setMainImage(mainImageData.setting_value as string)
-      }
-      
-      // Charger les thématiques
-      const centresData = settings.find(s => s.setting_key === 'centres_interets')
-      const mouvementsData = settings.find(s => s.setting_key === 'mouvements_preferes')
-      const themesData = settings.find(s => s.setting_key === 'themes')
-      
-      if (centresData?.setting_value) {
-        try {
-          const parsed = typeof centresData.setting_value === 'string' 
-            ? JSON.parse(centresData.setting_value) 
-            : centresData.setting_value
-          // Vérifier si c'est l'ancien format (tableau de strings) ou le nouveau (tableau d'objets)
-          if (Array.isArray(parsed)) {
-            if (parsed.length > 0 && typeof parsed[0] === 'string') {
-              // Ancien format : convertir vers le nouveau
-              setCentresInterets(parsed.map((name: string, index: number) => ({
-                name,
-                image: DEFAULT_IMAGES.centres[index % DEFAULT_IMAGES.centres.length]
-              })))
-            } else {
-              // Nouveau format
-              setCentresInterets(parsed)
-            }
-          }
-        } catch (e) {
-          console.error('Erreur parsing centres_interets:', e)
-          setCentresInterets([])
+      // Charger l'image principale du musée
+      const museumInfoResponse = await fetch('/api/museum-info')
+      if (museumInfoResponse.ok) {
+        const museumData = await museumInfoResponse.json()
+        if (museumData.main_image) {
+          setMainImage(museumData.main_image)
         }
       }
       
-      if (mouvementsData?.setting_value) {
-        try {
-          const parsed = typeof mouvementsData.setting_value === 'string' 
-            ? JSON.parse(mouvementsData.setting_value) 
-            : mouvementsData.setting_value
-          // Vérifier si c'est l'ancien format (tableau de strings) ou le nouveau (tableau d'objets)
-          if (Array.isArray(parsed)) {
-            if (parsed.length > 0 && typeof parsed[0] === 'string') {
-              // Ancien format : convertir vers le nouveau
-              setMouvementsPreferes(parsed.map((name: string, index: number) => ({
-                name,
-                image: DEFAULT_IMAGES.mouvements[index % DEFAULT_IMAGES.mouvements.length]
-              })))
-            } else {
-              // Nouveau format
-              setMouvementsPreferes(parsed)
-            }
-          }
-        } catch (e) {
-          console.error('Erreur parsing mouvements_preferes:', e)
-          setMouvementsPreferes([])
-        }
+      // Charger les centres d'intérêts
+      const centresResponse = await fetch('/api/centres-interets')
+      if (centresResponse.ok) {
+        const centresData = await centresResponse.json()
+        setCentresInterets(centresData.map((c: any) => ({
+          id: c.centre_id,
+          name: c.name,
+          description: c.description,
+          aiIndication: c.ai_indication,
+          image: c.image || DEFAULT_IMAGES.centres[0]
+        })))
       }
       
-      if (themesData?.setting_value) {
-        try {
-          const parsed = typeof themesData.setting_value === 'string' 
-            ? JSON.parse(themesData.setting_value) 
-            : themesData.setting_value
-          if (Array.isArray(parsed)) {
-            setThemes(parsed)
-          }
-        } catch (e) {
-          console.error('Erreur parsing themes:', e)
-          setThemes([])
-        }
+      // Charger les mouvements artistiques
+      const mouvementsResponse = await fetch('/api/mouvements')
+      if (mouvementsResponse.ok) {
+        const mouvementsData = await mouvementsResponse.json()
+        setMouvementsPreferes(mouvementsData.map((m: any) => ({
+          id: m.mouvement_id,
+          name: m.name,
+          description: m.description,
+          aiIndication: m.ai_indication,
+          image: m.image || DEFAULT_IMAGES.mouvements[0]
+        })))
+      }
+      
+      // Charger les thèmes
+      const themesResponse = await fetch('/api/themes')
+      if (themesResponse.ok) {
+        const themesData = await themesResponse.json()
+        setThemes(themesData.map((t: any) => ({
+          id: t.theme_id,
+          name: t.name,
+          description: t.description,
+          aiIndication: t.ai_indication,
+          image: t.image || '/api/placeholder/64/64?text=Theme'
+        })))
       }
       
     } catch (error) {
       console.error('Erreur:', error)
+      alert('Erreur lors du chargement des données')
     } finally {
       setIsLoading(false)
     }
@@ -155,42 +126,8 @@ export default function ThematiquesPage() {
   const handleSaveThemes = async () => {
     setIsSaving(true)
     try {
-      console.log('Sauvegarde des thématiques:', { centresInterets, mouvementsPreferes })
-      
-      const responses = await Promise.all([
-        fetch('/api/museum-settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            setting_key: 'centres_interets',
-            setting_value: JSON.stringify(centresInterets),
-          }),
-        }),
-        fetch('/api/museum-settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            setting_key: 'mouvements_preferes',
-            setting_value: JSON.stringify(mouvementsPreferes),
-          }),
-        }),
-        fetch('/api/museum-settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            setting_key: 'themes',
-            setting_value: JSON.stringify(themes),
-          }),
-        }),
-      ])
-
-      if (responses.every(r => r.ok)) {
-        console.log('Thématiques sauvegardées avec succès')
-        alert('Thématiques sauvegardées avec succès!')
-      } else {
-        console.error('Erreur lors de la sauvegarde des thématiques')
-        alert('Erreur lors de la sauvegarde des thématiques')
-      }
+      // Note: Cette fonction n'est plus nécessaire car on sauvegarde directement lors de l'ajout
+      alert('Les thématiques sont sauvegardées automatiquement lors de leur ajout/suppression')
     } catch (error) {
       console.error('Erreur lors de la sauvegarde:', error)
       alert('Erreur de connexion lors de la sauvegarde')
@@ -198,64 +135,193 @@ export default function ThematiquesPage() {
     setIsSaving(false)
   }
 
-  const addCentreInteret = () => {
+  const addCentreInteret = async () => {
     if (newCentreInteret.trim() && !centresInterets.find(c => c.name === newCentreInteret.trim())) {
-      const newItem: ThemeItem = {
-        name: newCentreInteret.trim(),
-        description: newCentreDescription.trim() || undefined,
-        aiIndication: newCentreAiIndication.trim() || undefined,
-        image: selectedCentreImage || DEFAULT_IMAGES.centres[centresInterets.length % DEFAULT_IMAGES.centres.length]
+      try {
+        const response = await fetch('/api/centres-interets', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newCentreInteret.trim(),
+            description: newCentreDescription.trim() || null,
+            ai_indication: newCentreAiIndication.trim() || null,
+            image: selectedCentreImage || DEFAULT_IMAGES.centres[centresInterets.length % DEFAULT_IMAGES.centres.length]
+          })
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          setCentresInterets([...centresInterets, {
+            id: result.data.centre_id,
+            name: result.data.name,
+            description: result.data.description,
+            aiIndication: result.data.ai_indication,
+            image: result.data.image
+          }])
+          setNewCentreInteret('')
+          setNewCentreDescription('')
+          setNewCentreAiIndication('')
+          setSelectedCentreImage('')
+          alert('Centre d\'intérêt ajouté avec succès!')
+        } else {
+          const error = await response.json()
+          alert(error.error || 'Erreur lors de l\'ajout')
+        }
+      } catch (error) {
+        console.error('Erreur:', error)
+        alert('Erreur de connexion')
       }
-      setCentresInterets([...centresInterets, newItem])
-      setNewCentreInteret('')
-      setNewCentreDescription('')
-      setNewCentreAiIndication('')
-      setSelectedCentreImage('')
     }
   }
 
-  const removeCentreInteret = (index: number) => {
-    setCentresInterets(centresInterets.filter((_, i) => i !== index))
+  const removeCentreInteret = async (index: number) => {
+    const centre = centresInterets[index]
+    if (!centre.id) {
+      setCentresInterets(centresInterets.filter((_, i) => i !== index))
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/centres-interets?id=${centre.id}`, {
+        method: 'DELETE'
+      })
+      
+      if (response.ok) {
+        setCentresInterets(centresInterets.filter((_, i) => i !== index))
+        alert('Centre d\'intérêt supprimé avec succès!')
+      } else {
+        alert('Erreur lors de la suppression')
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur de connexion')
+    }
   }
 
-  const addMouvementPrefere = () => {
+  const addMouvementPrefere = async () => {
     if (newMouvementPrefere.trim() && !mouvementsPreferes.find(m => m.name === newMouvementPrefere.trim())) {
-      const newItem: ThemeItem = {
-        name: newMouvementPrefere.trim(),
-        description: newMouvementDescription.trim() || undefined,
-        aiIndication: newMouvementAiIndication.trim() || undefined,
-        image: selectedMouvementImage || DEFAULT_IMAGES.mouvements[mouvementsPreferes.length % DEFAULT_IMAGES.mouvements.length]
+      try {
+        const response = await fetch('/api/mouvements', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newMouvementPrefere.trim(),
+            description: newMouvementDescription.trim() || null,
+            ai_indication: newMouvementAiIndication.trim() || null,
+            image: selectedMouvementImage || DEFAULT_IMAGES.mouvements[mouvementsPreferes.length % DEFAULT_IMAGES.mouvements.length]
+          })
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          setMouvementsPreferes([...mouvementsPreferes, {
+            id: result.data.mouvement_id,
+            name: result.data.name,
+            description: result.data.description,
+            aiIndication: result.data.ai_indication,
+            image: result.data.image
+          }])
+          setNewMouvementPrefere('')
+          setNewMouvementDescription('')
+          setNewMouvementAiIndication('')
+          setSelectedMouvementImage('')
+          alert('Mouvement ajouté avec succès!')
+        } else {
+          const error = await response.json()
+          alert(error.error || 'Erreur lors de l\'ajout')
+        }
+      } catch (error) {
+        console.error('Erreur:', error)
+        alert('Erreur de connexion')
       }
-      setMouvementsPreferes([...mouvementsPreferes, newItem])
-      setNewMouvementPrefere('')
-      setNewMouvementDescription('')
-      setNewMouvementAiIndication('')
-      setSelectedMouvementImage('')
     }
   }
 
-  const removeMouvementPrefere = (index: number) => {
-    setMouvementsPreferes(mouvementsPreferes.filter((_, i) => i !== index))
+  const removeMouvementPrefere = async (index: number) => {
+    const mouvement = mouvementsPreferes[index]
+    if (!mouvement.id) {
+      setMouvementsPreferes(mouvementsPreferes.filter((_, i) => i !== index))
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/mouvements?id=${mouvement.id}`, {
+        method: 'DELETE'
+      })
+      
+      if (response.ok) {
+        setMouvementsPreferes(mouvementsPreferes.filter((_, i) => i !== index))
+        alert('Mouvement supprimé avec succès!')
+      } else {
+        alert('Erreur lors de la suppression')
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur de connexion')
+    }
   }
 
-  const addTheme = () => {
+  const addTheme = async () => {
     if (newTheme.trim() && !themes.find(t => t.name === newTheme.trim())) {
-      const newItem: ThemeItem = {
-        name: newTheme.trim(),
-        description: newThemeDescription.trim() || undefined,
-        aiIndication: newThemeAiIndication.trim() || undefined,
-        image: selectedThemeImage || '/api/placeholder/64/64?text=Theme'
+      try {
+        const response = await fetch('/api/themes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newTheme.trim(),
+            description: newThemeDescription.trim() || null,
+            ai_indication: newThemeAiIndication.trim() || null,
+            image: selectedThemeImage || '/api/placeholder/64/64?text=Theme'
+          })
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          setThemes([...themes, {
+            id: result.data.theme_id,
+            name: result.data.name,
+            description: result.data.description,
+            aiIndication: result.data.ai_indication,
+            image: result.data.image
+          }])
+          setNewTheme('')
+          setNewThemeDescription('')
+          setNewThemeAiIndication('')
+          setSelectedThemeImage('')
+          alert('Thème ajouté avec succès!')
+        } else {
+          const error = await response.json()
+          alert(error.error || 'Erreur lors de l\'ajout')
+        }
+      } catch (error) {
+        console.error('Erreur:', error)
+        alert('Erreur de connexion')
       }
-      setThemes([...themes, newItem])
-      setNewTheme('')
-      setNewThemeDescription('')
-      setNewThemeAiIndication('')
-      setSelectedThemeImage('')
     }
   }
 
-  const removeTheme = (index: number) => {
-    setThemes(themes.filter((_, i) => i !== index))
+  const removeTheme = async (index: number) => {
+    const theme = themes[index]
+    if (!theme.id) {
+      setThemes(themes.filter((_, i) => i !== index))
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/themes?id=${theme.id}`, {
+        method: 'DELETE'
+      })
+      
+      if (response.ok) {
+        setThemes(themes.filter((_, i) => i !== index))
+        alert('Thème supprimé avec succès!')
+      } else {
+        alert('Erreur lors de la suppression')
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur de connexion')
+    }
   }
 
   const handleSaveMainImage = async () => {
@@ -263,12 +329,11 @@ export default function ThematiquesPage() {
     
     setIsSaving(true)
     try {
-      const response = await fetch('/api/museum-settings', {
+      const response = await fetch('/api/museum-info', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          setting_key: 'main_image',
-          setting_value: mainImage,
+          main_image: mainImage,
         }),
       })
 

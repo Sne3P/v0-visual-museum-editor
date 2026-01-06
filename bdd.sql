@@ -1,12 +1,50 @@
 -- ===============================
--- TABLE : museum_settings
+-- TABLE : museum_info (Informations générales du musée)
 -- ===============================
-CREATE TABLE IF NOT EXISTS museum_settings (
-    setting_id SERIAL PRIMARY KEY,
-    setting_key TEXT UNIQUE NOT NULL,
-    setting_value JSONB NOT NULL,
+CREATE TABLE IF NOT EXISTS museum_info (
+    museum_id SERIAL PRIMARY KEY,
+    museum_name TEXT NOT NULL,
+    main_image TEXT,
+    opening_hours JSONB,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ===============================
+-- TABLE : centres_interets
+-- ===============================
+CREATE TABLE IF NOT EXISTS centres_interets (
+    centre_id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
     description TEXT,
-    category TEXT DEFAULT 'general',
+    ai_indication TEXT,
+    image TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ===============================
+-- TABLE : mouvements_artistiques
+-- ===============================
+CREATE TABLE IF NOT EXISTS mouvements_artistiques (
+    mouvement_id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    ai_indication TEXT,
+    image TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ===============================
+-- TABLE : themes
+-- ===============================
+CREATE TABLE IF NOT EXISTS themes (
+    theme_id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    ai_indication TEXT,
+    image TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
