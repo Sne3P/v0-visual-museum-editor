@@ -1,0 +1,58 @@
+/* === Styles for each selector item === */
+
+.selector-item {
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+  background-color: white;
+  color: #333;
+  border-bottom: 1px solid #ddd;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+/* Hover effect */
+.selector-item:hover {
+  background-color: #f4f4f4;
+}
+
+/* Selected state */
+.selector-item.selected {
+  background-color: #5dace2; /* Light blue highlight */
+  color: black;
+  border-bottom: 1px solid #5dace2;
+}
+
+/* Icon section */
+.selector-icon {
+  font-size: 1.5rem;
+  margin-right: 15px;
+  width: 40px;
+  text-align: center;
+}
+
+/* Text container */
+.selector-details {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+/* Title (bold top line) */
+.selector-title {
+  font-size: 1.1rem;
+  font-weight: bold;
+  margin-bottom: 2px;
+  color: #000;
+}
+
+/* Description (smaller bottom line) */
+.selector-description {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+/* Make selected icons darker */
+.selector-item.selected .selector-icon {
+  color: #000;
+}

@@ -1,0 +1,32 @@
+/* MesChoix.css */
+
+/* Prevent any horizontal overflow from this page */
+html, body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+/* Main container */
+.mes-choix-container {
+  width: 100vw;              
+  max-width: 100vw;
+  overflow-x: hidden;        
+  padding: 0;
+  margin: 0 auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;       
+  gap: 8px;                  
+}
+
+/* Ensure all children respect container width */
+.mes-choix-container > * {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;        
+}

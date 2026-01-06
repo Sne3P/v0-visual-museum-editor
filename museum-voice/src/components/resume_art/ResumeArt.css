@@ -1,0 +1,114 @@
+/* MAIN CONTAINER */
+.resume-art {
+  width: 100%;
+  max-width: 100vw;
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  position: relative;
+  font-family: "Poppins", sans-serif;
+}
+
+/* IMAGE WRAPPER */
+.resume-art-image-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+/*  MAIN IMAGE */
+.resume-art-image {
+  width: 100%;
+  height: 80vh;
+  object-fit: cover;
+  display: block;
+}
+
+/*  TOP ICONS */
+.resume-art-top-icons {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  justify-content: space-between;
+  color: white;
+  font-size: 20px;
+  z-index: 3;
+}
+
+/*  CONTROLS OVERLAY (BOTTOM BAR) */
+.resume-art-controls-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  backdrop-filter: blur(6px);
+  z-index: 4;
+}
+
+/* ⏯ CONTROL BUTTONS */
+.resume-art-controls {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  width: 40%;
+  max-width: 250px;
+  margin-bottom: 8px;
+  /* add spacing before progress bar */
+}
+
+/*  PROGRESS BAR (below controls) */
+.resume-art-progress {
+  width: 85%;
+  height: 5px;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 50px;
+  overflow: hidden;
+}
+
+.resume-progress-fill {
+  height: 100%;
+  width: 0;
+  background-color: #0a0a2a;
+  border-radius: 50px;
+  transition: width 0.4s ease;
+}
+
+/*  ICON STYLE */
+.resume-art-top-icons .icon {
+  cursor: pointer;
+  transition: transform 0.2s, color 0.3s;
+  color: #ffffff;
+  font-size: 22px;
+}
+
+.icon {
+  cursor: pointer;
+  transition: transform 0.2s, color 0.3s;
+  color: #060606;
+  font-size: 22px;
+}
+
+.icon:hover {
+  transform: scale(1.2);
+}
+
+/* PLAY BUTTON */
+.play-btn {
+  background-color: #0a0a2a;
+  color: white;
+  padding: 10px;
+  border-radius: 50%;
+  font-size: 18px;
+  transition: transform 0.3s;
+}
+
+.play-btn:hover {
+  transform: scale(1.15);
+}

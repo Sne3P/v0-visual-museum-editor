@@ -1,0 +1,90 @@
+/* ThemeAndSeasonsSelector.css */
+
+/* --- Conteneur Principal --- */
+.movement-selector-container {
+  width: 100vw; /* Taille pour l'affichage mobile/carte */
+  margin: 20px auto; 
+  font-family: Arial, sans-serif; 
+  border: 1px solid #000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.movement-selector-header {
+  background-color: #001f3f; /* Bleu marine foncé */
+  color: white;
+  padding: 15px;
+  font-size: 1.25rem; 
+  font-weight: bold;
+  text-align: center;
+}
+
+/* --- Grille des Mouvements --- */
+.movement-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* Grille 3 colonnes de taille égale */
+  gap: 0; /* Pas d'espace entre les tuiles */
+  background-color: #000; /* Fond noir pour les séparations si non géré par les bords */
+}
+
+/* --- Tuile de la Grille (SelectorGridItem) --- */
+.grid-item {
+  position: relative;
+  width: 100%;
+  padding-bottom: 100%; /* Ratio 1:1 pour les tuiles carrées */
+  background-size: cover;
+  background-position: center;
+  border: 1px solid #000; /* Bordure noire pour séparer les tuiles */
+  box-sizing: border-box;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+/* --- Bandeau de Titre --- */
+.title-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background-color: #001f3f; /* Bleu marine par défaut */
+  color: white;
+  text-align: center;
+  padding: 8px 0;
+  font-weight: bold;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  transition: background-color 0.15s ease;
+}
+
+/* --- Style de l'élément sélectionné (Romantisme) --- */
+.grid-item.selected .title-bar {
+  background-color: #5dace2; /* Bleu clair */
+  color: black;
+}
+
+/* --- Style de la Tuile Néo-Classique (Texte) --- */
+.grid-item:nth-child(6) { /* Sélectionne la 6ème tuile (Néo-Classique) */
+  background-color: #fff; /* Fond blanc */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.text-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  color: #000;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  font-style: italic;
+  padding-bottom: 25px; /* Pour éviter le chevauchement avec le titre */
+}
+
+.text-overlay .star {
+  font-size: 1.2rem;
+  display: block;
+  margin: 5px 0;
+}

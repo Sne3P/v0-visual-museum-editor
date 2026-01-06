@@ -1,0 +1,94 @@
+/* ResumeTypeSelector.css */
+
+/* Container pour l'ensemble du composant (simule l'encadrement noir) */
+.resume-selector-container {
+  width: auto; /* Taille pour simuler un composant mobile ou une carte */
+  margin: 5px auto; 
+  font-family: Arial, sans-serif; 
+  /* Cadre noir/bleu très foncé */
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* En-tête (Bleu marine) */
+.selector-header {
+  background-color: #001f3f; /* Bleu marine foncé */
+  color: white;
+  padding: 20px 10px;
+  font-size: 1.5rem; 
+  font-weight: bold;
+  text-align: center;
+  border-bottom: 4px solid #000; /* Ligne de séparation noire comme dans l'image */
+}
+
+/* --- Styles pour les éléments de la liste (SelectorItem) --- */
+
+/* Conteneur d'un élément (style-item est la classe utilisée dans SelectorItem.jsx) */
+.style-item {
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+  background-color: white;
+  color: #333; 
+  border-bottom: 1px solid #ddd; /* Séparateur léger */
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* Retirer la bordure du dernier élément */
+.selector-list .style-item:last-child {
+  border-bottom: none;
+}
+
+/* Effet de survol */
+.style-item:hover {
+  background-color: #f4f4f4;
+}
+
+/* Style de l'élément sélectionné (Bleu clair) */
+.style-item.selected {
+  background-color: #5dace2; /* Bleu clair similaire à l'image */
+  color: black; 
+  /* Supprimer la bordure du dessous pour créer un bloc continu */
+  border-bottom: none; 
+}
+
+/* Style de l'élément sélectionné SANS icône (l'icône est graphique dans l'image) */
+.style-item.selected .style-title, 
+.style-item.selected .style-description {
+  color: black; 
+}
+
+/* Conteneur pour l'icône/Emoji (pour l'alignement) */
+.style-icon {
+  font-size: 1.5rem; 
+  margin-right: 15px;
+  width: 40px; /* Largeur fixe pour aligner parfaitement le texte */
+  text-align: center;
+}
+
+/* Bloc de titre et description */
+.style-details {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+/* Titre (Gras) */
+.style-title {
+  font-size: 1.1rem; 
+  font-weight: bold;
+  margin-bottom: 2px; 
+  color: #000; 
+}
+
+/* Description (Texte plus petit et discret) */
+.style-description {
+  font-size: 0.9rem;
+  font-weight: normal;
+  color: #555; 
+}
+
+/* Ajustement pour le texte de la description en mode sélectionné (pour une bonne lisibilité) */
+.style-item.selected .style-description {
+    color: #333; /* Un gris très foncé */
+}

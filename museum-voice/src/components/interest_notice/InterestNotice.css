@@ -1,0 +1,21 @@
+.interest-notice {
+  text-align: center;
+  padding: 20px;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  font-family: "Inter", sans-serif;
+  color: #000;
+}
+
+.interest-title {
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+.interest-description {
+  font-weight: 500;
+  font-size: 14px;
+  line-height: 1.5;
+}

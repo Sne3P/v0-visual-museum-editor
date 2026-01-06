@@ -1,0 +1,60 @@
+.resume-progress-container {
+  width: 100%;
+  background: linear-gradient(to right, #e8ebe7, #e9ece8);
+  padding: 5px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: "Georgia", serif;
+}
+
+.resume-progress-row {
+  display: flex;
+  align-items: center;
+  width: 96vw;
+  max-width: 98vw;
+  position: relative;
+}
+
+.resume-progress-bar {
+  flex: 1; /* ✅ fills all remaining space */
+  height: 16px;
+  background-color: transparent;
+  border: 2px solid #0a0a2a;
+  border-radius: 50px;
+  overflow: hidden;
+}
+
+.resume-progress-fill {
+  background-color: #0a0a2a;
+  height: 100%;
+  transition: width 0.4s ease;
+  border-radius: 50px 0 0 50px;
+}
+
+.resume-time-box {
+  border: 2px solid #0a0a2a;
+  border-radius: 12px;
+  padding: 4px 16px;
+  font-weight: bold;
+  font-size: 1.6rem;
+  background: transparent;
+  color: #0a0a2a;
+  margin-left: 8px; /* slight breathing space */
+  white-space: nowrap;
+  flex-shrink: 0; /* ✅ keeps fixed width */
+}
+
+.resume-progress-info {
+  width: 95%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  color: #0a0a2a;
+}
+
+.resume-progress-text {
+  font-weight: bold;
+  font-size: 1.9rem;
+}

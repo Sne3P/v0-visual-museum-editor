@@ -1,0 +1,30 @@
+.header {
+    background-color: #06042b;
+    color: #fff;
+    border-bottom: 2px solid rgba(255,255,255,0.12);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: auto;
+    min-height: 84px;
+    box-sizing: border-box;
+}
+
+.header-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: clamp(32px, 5vw, 56px);
+    line-height: 1.2;
+    margin: 0;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    text-align: center;
+    padding: 10px 0;
+}
+
+@media (max-width: 768px) {
+    .header {
+        padding: 10px 16px;
+        min-height: 64px;
+    }
+}

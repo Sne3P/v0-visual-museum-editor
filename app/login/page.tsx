@@ -27,6 +27,14 @@ export default function LoginPage() {
     }
   }
 
+  const quickAdminLogin = () => {
+    setUsername('admin')
+    setPassword('admin123')
+    if (login('admin', 'admin123')) {
+      router.push('/admin')
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <Card className="w-full max-w-md">
@@ -70,6 +78,15 @@ export default function LoginPage() {
             
             <Button type="submit" className="w-full">
               Se connecter
+            </Button>
+
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="w-full mt-2"
+              onClick={quickAdminLogin}
+            >
+              🚀 Connexion Admin Rapide
             </Button>
           </form>
           

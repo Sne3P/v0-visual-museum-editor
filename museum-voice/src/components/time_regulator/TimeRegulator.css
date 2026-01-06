@@ -1,0 +1,123 @@
+/* Full-page centering */
+.time-page {
+  width: 100vw;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #f5f5f5;
+}
+
+/* Main box */
+.time-container {
+  background-color: white;
+  border: 1px solid #dcdcdc;
+  border-radius: 10px;
+  padding: 15px 25px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  width: 100%;
+  font-family: "Poppins", sans-serif;
+}
+
+/* Title and display */
+.title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.title-row h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1c1c3b;
+}
+
+.time-display {
+  border: 1.5px solid #2fafff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: #2fafff;
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+/* Slider wrapper */
+.slider-wrapper {
+  position: relative;
+  width: 100%;
+  margin-top: 20px;
+}
+
+/* Labels on top */
+.labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px; /* space between labels and slider */
+  padding: 0;
+  color: #1c1c3b;
+  font-size: 0.9rem;
+  font-weight: 500;
+  position: relative;
+}
+
+/* Slider bar */
+.slider {
+  width: 100%;
+  appearance: none;
+  height: 6px;
+  border-radius: 5px;
+  background: linear-gradient(
+    to right,
+    #66c8ff 0%,
+    #66c8ff calc((var(--value, 3.5) / 5) * 100%),
+    #e7f6ff calc((var(--value, 3.5) / 5) * 100%),
+    #e7f6ff 100%
+  );
+  outline: none;
+  transition: background 0.3s;
+  z-index: 2;
+  position: relative;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #66c8ff;
+  cursor: pointer;
+  border: none;
+  z-index: 3;
+  position: relative;
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.05);
+}
+
+/* Tick marks */
+.ticks {
+  position: absolute;
+  top: 50%;
+  /* fix: align perfectly with slider track */
+  width: calc(100% - 15px); /* subtract thumb width */
+  left: 7.5px; /* center the ticks within visible track area */
+  height: 10px;
+  pointer-events: none;
+}
+
+.tick {
+  position: absolute;
+  transform: translateX(-50%) translateY(-50%);
+  width: 2px;
+  height: 10px;
+  background: #1c1c3b;
+  border-radius: 2px;
+}
+
+.tick.half {
+  height: 6px;
+  background: #3e3e4b;
+}

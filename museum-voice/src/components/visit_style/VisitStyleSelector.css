@@ -1,0 +1,94 @@
+/* Container for the entire component */
+.visit-selector-container {
+  /* Set max-width to simulate the card-like appearance */
+  max-width: 100vw; 
+  margin: 0px auto; 
+  /* Use a dark, elegant font if available, otherwise fallback to system font */
+  font-family: Arial, sans-serif; 
+  /* The entire component has a uniform look */
+  border: 1px solid #ccc; 
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Header styling (Dark Blue background) */
+.selector-header {
+  background-color: #001f3f; /* Deep, dark blue similar to the image */
+  color: white;
+  padding: 20px;
+  font-size: 1.25rem; /* Larger, prominent text */
+  font-weight: bold;
+  text-align: center;
+}
+
+/* Individual list item styling */
+.style-item {
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+  background-color: white;
+  color: #333; /* Dark text for descriptions */
+  border-bottom: 1px solid #ddd; /* Light separator line */
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.selector-list .style-item:last-child {
+  border-bottom: none;
+}
+
+.style-item:hover {
+  background-color: #f4f4f4;
+}
+
+/* The selected item's special styling (Light Blue background) */
+.style-item.selected {
+  background-color: #5dace2; /* Bright, light blue */
+  color: black; /* Text becomes black for better contrast on light blue */
+  /* Remove border of the selected item to match the image's continuous block */
+  border-bottom: 1px solid #5dace2; 
+}
+
+/* Text in the selected block is slightly different */
+.style-item.selected .style-title {
+  color: black; 
+}
+.style-item.selected .style-description {
+  color: #333; /* Slightly darker description on the light background */
+}
+
+
+/* Icon/Emoji container (simulating the graphic icons) */
+.style-icon {
+  font-size: 1.5rem; /* Icon size */
+  margin-right: 15px;
+  /* Make the icon block size fixed to align text perfectly, similar to the image */
+  width: 40px; 
+  text-align: center;
+}
+
+/* Styling for the title and description block */
+.style-details {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+/* Title styling (Upper line, Bold, Larger) */
+.style-title {
+  font-size: 1.1rem; 
+  font-weight: bold;
+  margin-bottom: 2px; /* Small space between title and description */
+  color: #000; /* Main titles are black */
+}
+
+/* Description styling (Lower line, Lighter, Smaller) */
+.style-description {
+  font-size: 0.9rem;
+  font-weight: normal;
+  color: #555; /* Subtle grey for the descriptive text */
+}
+
+/* Special styling for the selected item's icon (optional, but can enhance the look) */
+.style-item.selected .style-icon {
+  color: #000; /* Ensure icon is dark on the light blue background */
+}
