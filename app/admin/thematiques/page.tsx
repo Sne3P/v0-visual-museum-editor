@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/auth-context'
-import { Save, Palette, Plus, X, ArrowLeft, Image, Upload } from 'lucide-react'
+import { Save, Palette, Plus, X, ArrowLeft, Image, Upload, Edit2, Check } from 'lucide-react'
 import type { MuseumSetting } from '@/core/entities/museum-settings.types'
 import type { ThemeItem, ThemeState } from '@/core/entities/thematiques.types'
 
@@ -52,6 +52,15 @@ export default function ThematiquesPage() {
   const [isUploadingCentre, setIsUploadingCentre] = useState(false)
   const [isUploadingMouvement, setIsUploadingMouvement] = useState(false)
   const [isUploadingTheme, setIsUploadingTheme] = useState(false)
+  
+  // États pour l'édition
+  const [editingCentreId, setEditingCentreId] = useState<number | null>(null)
+  const [editingMouvementId, setEditingMouvementId] = useState<number | null>(null)
+  const [editingThemeId, setEditingThemeId] = useState<number | null>(null)
+  
+  const [editCentreData, setEditCentreData] = useState({ name: '', description: '', aiIndication: '', image: '' })
+  const [editMouvementData, setEditMouvementData] = useState({ name: '', description: '', aiIndication: '', image: '' })
+  const [editThemeData, setEditThemeData] = useState({ name: '', description: '', aiIndication: '', image: '' })
   
   // Image principale du musée
   const [mainImage, setMainImage] = useState<string>('')
@@ -317,6 +326,177 @@ export default function ThematiquesPage() {
         alert('Thème supprimé avec succès!')
       } else {
         alert('Erreur lors de la suppression')
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur de connexion')
+    }
+  }
+
+  // Fonctions d'édition pour Centres d'intérêts
+  const startEditCentre = (centre: ThemeItem, index: number) => {
+    setEditingCentreId(centre.id || null)
+    setEditCentreData({
+      name: centre.name,
+      description: centre.description || '',
+      aiIndication: centre.aiIndication || '',
+      image: centre.image || ''
+    })
+  }
+
+  const cancelEditCentre = () => {
+    setEditingCentreId(null)
+    setEditCentreData({ name: '', description: '', aiIndication: '', image: '' })
+  }
+
+  const saveEditCentre = async () => {
+    if (!editingCentreId) return
+
+    try {
+      const response = await fetch('/api/centres-interets', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          centre_id: editingCentreId,
+          name: editCentreData.name,
+          description: editCentreData.description || null,
+          ai_indication: editCentreData.aiIndication || null,
+          image: editCentreData.image || null
+        })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setCentresInterets(centresInterets.map(c => 
+          c.id === editingCentreId 
+            ? { 
+                id: result.data.centre_id,
+                name: result.data.name,
+                description: result.data.description,
+                aiIndication: result.data.ai_indication,
+                image: result.data.image
+              }
+            : c
+        ))
+        cancelEditCentre()
+        alert('Centre d\'intérêt modifié avec succès!')
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Erreur lors de la modification')
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur de connexion')
+    }
+  }
+
+  // Fonctions d'édition pour Mouvements
+  const startEditMouvement = (mouvement: ThemeItem) => {
+    setEditingMouvementId(mouvement.id || null)
+    setEditMouvementData({
+      name: mouvement.name,
+      description: mouvement.description || '',
+      aiIndication: mouvement.aiIndication || '',
+      image: mouvement.image || ''
+    })
+  }
+
+  const cancelEditMouvement = () => {
+    setEditingMouvementId(null)
+    setEditMouvementData({ name: '', description: '', aiIndication: '', image: '' })
+  }
+
+  const saveEditMouvement = async () => {
+    if (!editingMouvementId) return
+
+    try {
+      const response = await fetch('/api/mouvements', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mouvement_id: editingMouvementId,
+          name: editMouvementData.name,
+          description: editMouvementData.description || null,
+          ai_indication: editMouvementData.aiIndication || null,
+          image: editMouvementData.image || null
+        })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setMouvementsPreferes(mouvementsPreferes.map(m => 
+          m.id === editingMouvementId 
+            ? { 
+                id: result.data.mouvement_id,
+                name: result.data.name,
+                description: result.data.description,
+                aiIndication: result.data.ai_indication,
+                image: result.data.image
+              }
+            : m
+        ))
+        cancelEditMouvement()
+        alert('Mouvement modifié avec succès!')
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Erreur lors de la modification')
+      }
+    } catch (error) {
+      console.error('Erreur:', error)
+      alert('Erreur de connexion')
+    }
+  }
+
+  // Fonctions d'édition pour Thèmes
+  const startEditTheme = (theme: ThemeItem) => {
+    setEditingThemeId(theme.id || null)
+    setEditThemeData({
+      name: theme.name,
+      description: theme.description || '',
+      aiIndication: theme.aiIndication || '',
+      image: theme.image || ''
+    })
+  }
+
+  const cancelEditTheme = () => {
+    setEditingThemeId(null)
+    setEditThemeData({ name: '', description: '', aiIndication: '', image: '' })
+  }
+
+  const saveEditTheme = async () => {
+    if (!editingThemeId) return
+
+    try {
+      const response = await fetch('/api/themes', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          theme_id: editingThemeId,
+          name: editThemeData.name,
+          description: editThemeData.description || null,
+          ai_indication: editThemeData.aiIndication || null,
+          image: editThemeData.image || null
+        })
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        setThemes(themes.map(t => 
+          t.id === editingThemeId 
+            ? { 
+                id: result.data.theme_id,
+                name: result.data.name,
+                description: result.data.description,
+                aiIndication: result.data.ai_indication,
+                image: result.data.image
+              }
+            : t
+        ))
+        cancelEditTheme()
+        alert('Thème modifié avec succès!')
+      } else {
+        const error = await response.json()
+        alert(error.error || 'Erreur lors de la modification')
       }
     } catch (error) {
       console.error('Erreur:', error)
@@ -621,34 +801,137 @@ export default function ThematiquesPage() {
               <div className="space-y-3">
                 {centresInterets.map((centre, index) => (
                   <div key={index} className="flex flex-col gap-2 bg-blue-50 p-3 rounded-lg border border-blue-200">
-                    <div className="flex items-center gap-3">
-                      <img 
-                        src={centre.image || DEFAULT_IMAGES.centres[index % DEFAULT_IMAGES.centres.length]} 
-                        alt={centre.name}
-                        className="w-12 h-12 object-cover rounded-lg flex-shrink-0"
-                      />
-                      <span className="text-gray-800 font-medium flex-grow">{centre.name}</span>
-                      <button
-                        onClick={() => removeCentreInteret(index)}
-                        className="text-red-500 hover:text-red-700 transition-colors p-1"
-                        title="Supprimer"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                    {centre.description && (
-                      <p className="text-gray-600 text-sm pl-15">{centre.description}</p>
-                    )}
-                    {centre.aiIndication && (
-                      <div className="pl-15 bg-blue-100 p-2 rounded border border-blue-200">
-                        <p className="text-xs text-blue-700 font-medium mb-1 flex items-center gap-1">
-                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                          </svg>
-                          Indication IA:
-                        </p>
-                        <p className="text-blue-800 text-sm italic">{centre.aiIndication}</p>
+                    {editingCentreId === centre.id ? (
+                      // Mode édition
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={editCentreData.name}
+                            onChange={(e) => setEditCentreData({...editCentreData, name: e.target.value})}
+                            className="flex-grow p-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            placeholder="Nom"
+                          />
+                        </div>
+                        <textarea
+                          value={editCentreData.description}
+                          onChange={(e) => setEditCentreData({...editCentreData, description: e.target.value})}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                          placeholder="Description"
+                          rows={2}
+                        />
+                        <textarea
+                          value={editCentreData.aiIndication}
+                          onChange={(e) => setEditCentreData({...editCentreData, aiIndication: e.target.value})}
+                          className="w-full p-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none bg-blue-50"
+                          placeholder="Indication IA"
+                          rows={2}
+                        />
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 p-3 border-2 border-dashed border-blue-300 rounded-lg cursor-pointer hover:border-blue-400 transition-colors">
+                            <Upload className="h-5 w-5 text-blue-500" />
+                            <span className="text-blue-600 font-medium">
+                              {isUploadingCentre ? 'Upload en cours...' : 'Changer l\'image'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={isUploadingCentre}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) {
+                                  setIsUploadingCentre(true)
+                                  const formData = new FormData()
+                                  formData.append('image', file)
+                                  fetch('/api/upload-theme-image', {
+                                    method: 'POST',
+                                    body: formData,
+                                  })
+                                  .then(res => res.json())
+                                  .then(result => {
+                                    if (result.success) {
+                                      setEditCentreData({...editCentreData, image: result.imageUrl})
+                                    } else {
+                                      alert(result.error || 'Erreur lors de l\'upload')
+                                    }
+                                  })
+                                  .catch(error => {
+                                    console.error('Erreur upload:', error)
+                                    alert('Erreur lors de l\'upload du fichier')
+                                  })
+                                  .finally(() => setIsUploadingCentre(false))
+                                }
+                              }}
+                            />
+                          </label>
+                          {editCentreData.image && (
+                            <div className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                              <img 
+                                src={editCentreData.image || DEFAULT_IMAGES.centres[0]} 
+                                alt="Preview"
+                                className="w-12 h-12 object-cover rounded-lg"
+                              />
+                              <span className="text-xs text-gray-600 flex-grow truncate">{editCentreData.image}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={saveEditCentre}
+                            className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Check className="h-4 w-4" />
+                            Sauvegarder
+                          </button>
+                          <button
+                            onClick={cancelEditCentre}
+                            className="flex-1 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                          >
+                            Annuler
+                          </button>
+                        </div>
                       </div>
+                    ) : (
+                      // Mode affichage
+                      <>
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={centre.image || DEFAULT_IMAGES.centres[index % DEFAULT_IMAGES.centres.length]} 
+                            alt={centre.name}
+                            className="w-12 h-12 object-cover rounded-lg flex-shrink-0"
+                          />
+                          <span className="text-gray-800 font-medium flex-grow">{centre.name}</span>
+                          <button
+                            onClick={() => startEditCentre(centre, index)}
+                            className="text-blue-600 hover:text-blue-800 transition-colors p-1"
+                            title="Modifier"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => removeCentreInteret(index)}
+                            className="text-red-500 hover:text-red-700 transition-colors p-1"
+                            title="Supprimer"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                        {centre.description && (
+                          <p className="text-gray-600 text-sm pl-15">{centre.description}</p>
+                        )}
+                        {centre.aiIndication && (
+                          <div className="pl-15 bg-blue-100 p-2 rounded border border-blue-200">
+                            <p className="text-xs text-blue-700 font-medium mb-1 flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                              </svg>
+                              Indication IA:
+                            </p>
+                            <p className="text-blue-800 text-sm italic">{centre.aiIndication}</p>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ))}
@@ -811,34 +1094,137 @@ export default function ThematiquesPage() {
               <div className="space-y-3">
                 {mouvementsPreferes.map((mouvement, index) => (
                   <div key={index} className="flex flex-col gap-2 bg-purple-50 p-3 rounded-lg border border-purple-200">
-                    <div className="flex items-center gap-3">
-                      <img 
-                        src={mouvement.image || DEFAULT_IMAGES.mouvements[index % DEFAULT_IMAGES.mouvements.length]} 
-                        alt={mouvement.name}
-                        className="w-12 h-12 object-cover rounded-lg flex-shrink-0"
-                      />
-                      <span className="text-gray-800 font-medium flex-grow">{mouvement.name}</span>
-                      <button
-                        onClick={() => removeMouvementPrefere(index)}
-                        className="text-red-500 hover:text-red-700 transition-colors p-1"
-                        title="Supprimer"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                    {mouvement.description && (
-                      <p className="text-gray-600 text-sm pl-15">{mouvement.description}</p>
-                    )}
-                    {mouvement.aiIndication && (
-                      <div className="pl-15 bg-purple-100 p-2 rounded border border-purple-200">
-                        <p className="text-xs text-purple-700 font-medium mb-1 flex items-center gap-1">
-                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                          </svg>
-                          Indication IA:
-                        </p>
-                        <p className="text-purple-800 text-sm italic">{mouvement.aiIndication}</p>
+                    {editingMouvementId === mouvement.id ? (
+                      // Mode édition
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={editMouvementData.name}
+                            onChange={(e) => setEditMouvementData({...editMouvementData, name: e.target.value})}
+                            className="flex-grow p-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                            placeholder="Nom"
+                          />
+                        </div>
+                        <textarea
+                          value={editMouvementData.description}
+                          onChange={(e) => setEditMouvementData({...editMouvementData, description: e.target.value})}
+                          className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-none"
+                          placeholder="Description"
+                          rows={2}
+                        />
+                        <textarea
+                          value={editMouvementData.aiIndication}
+                          onChange={(e) => setEditMouvementData({...editMouvementData, aiIndication: e.target.value})}
+                          className="w-full p-2 border border-purple-300 rounded-lg focus:ring-2 focus:ring-purple-500 resize-none bg-purple-50"
+                          placeholder="Indication IA"
+                          rows={2}
+                        />
+                        <div className="space-y-2">
+                          <label className="flex items-center gap-2 p-3 border-2 border-dashed border-purple-300 rounded-lg cursor-pointer hover:border-purple-400 transition-colors">
+                            <Upload className="h-5 w-5 text-purple-500" />
+                            <span className="text-purple-600 font-medium">
+                              {isUploadingMouvement ? 'Upload en cours...' : 'Changer l\'image'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={isUploadingMouvement}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) {
+                                  setIsUploadingMouvement(true)
+                                  const formData = new FormData()
+                                  formData.append('image', file)
+                                  fetch('/api/upload-theme-image', {
+                                    method: 'POST',
+                                    body: formData,
+                                  })
+                                  .then(res => res.json())
+                                  .then(result => {
+                                    if (result.success) {
+                                      setEditMouvementData({...editMouvementData, image: result.imageUrl})
+                                    } else {
+                                      alert(result.error || 'Erreur lors de l\'upload')
+                                    }
+                                  })
+                                  .catch(error => {
+                                    console.error('Erreur upload:', error)
+                                    alert('Erreur lors de l\'upload du fichier')
+                                  })
+                                  .finally(() => setIsUploadingMouvement(false))
+                                }
+                              }}
+                            />
+                          </label>
+                          {editMouvementData.image && (
+                            <div className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                              <img 
+                                src={editMouvementData.image || DEFAULT_IMAGES.mouvements[0]} 
+                                alt="Preview"
+                                className="w-12 h-12 object-cover rounded-lg"
+                              />
+                              <span className="text-xs text-gray-600 flex-grow truncate">{editMouvementData.image}</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={saveEditMouvement}
+                            className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                          >
+                            <Check className="h-4 w-4" />
+                            Sauvegarder
+                          </button>
+                          <button
+                            onClick={cancelEditMouvement}
+                            className="flex-1 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                          >
+                            Annuler
+                          </button>
+                        </div>
                       </div>
+                    ) : (
+                      // Mode affichage
+                      <>
+                        <div className="flex items-center gap-3">
+                          <img 
+                            src={mouvement.image || DEFAULT_IMAGES.mouvements[index % DEFAULT_IMAGES.mouvements.length]} 
+                            alt={mouvement.name}
+                            className="w-12 h-12 object-cover rounded-lg flex-shrink-0"
+                          />
+                          <span className="text-gray-800 font-medium flex-grow">{mouvement.name}</span>
+                          <button
+                            onClick={() => startEditMouvement(mouvement)}
+                            className="text-purple-600 hover:text-purple-800 transition-colors p-1"
+                            title="Modifier"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => removeMouvementPrefere(index)}
+                            className="text-red-500 hover:text-red-700 transition-colors p-1"
+                            title="Supprimer"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                        {mouvement.description && (
+                          <p className="text-gray-600 text-sm pl-15">{mouvement.description}</p>
+                        )}
+                        {mouvement.aiIndication && (
+                          <div className="pl-15 bg-purple-100 p-2 rounded border border-purple-200">
+                            <p className="text-xs text-purple-700 font-medium mb-1 flex items-center gap-1">
+                              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                              </svg>
+                              Indication IA:
+                            </p>
+                            <p className="text-purple-800 text-sm italic">{mouvement.aiIndication}</p>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 ))}
@@ -984,36 +1370,139 @@ export default function ThematiquesPage() {
           <div className="mt-6 space-y-3">
             {themes.map((theme, index) => (
               <div key={index} className="flex flex-col bg-green-50 p-4 rounded-lg border border-green-200">
-                <div className="flex items-center gap-3">
-                  <img 
-                    src={theme.image || '/api/placeholder/64/64?text=Theme'} 
-                    alt={theme.name}
-                    className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
-                  />
-                  <div className="flex-grow">
-                    <h4 className="text-gray-900 font-semibold text-lg">{theme.name}</h4>
-                    {theme.description && (
-                      <p className="text-gray-600 text-sm mt-1">{theme.description}</p>
+                {editingThemeId === theme.id ? (
+                  // Mode édition
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={editThemeData.name}
+                        onChange={(e) => setEditThemeData({...editThemeData, name: e.target.value})}
+                        className="flex-grow p-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        placeholder="Nom"
+                      />
+                    </div>
+                    <textarea
+                      value={editThemeData.description}
+                      onChange={(e) => setEditThemeData({...editThemeData, description: e.target.value})}
+                      className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 resize-none"
+                      placeholder="Description"
+                      rows={2}
+                    />
+                    <textarea
+                      value={editThemeData.aiIndication}
+                      onChange={(e) => setEditThemeData({...editThemeData, aiIndication: e.target.value})}
+                      className="w-full p-2 border border-green-300 rounded-lg focus:ring-2 focus:ring-green-500 resize-none bg-green-50"
+                      placeholder="Indication IA"
+                      rows={2}
+                    />
+                    <div className="space-y-2">
+                      <label className="flex items-center gap-2 p-3 border-2 border-dashed border-green-300 rounded-lg cursor-pointer hover:border-green-400 transition-colors">
+                        <Upload className="h-5 w-5 text-green-500" />
+                        <span className="text-green-600 font-medium">
+                          {isUploadingTheme ? 'Upload en cours...' : 'Changer l\'image'}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={isUploadingTheme}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0]
+                            if (file) {
+                              setIsUploadingTheme(true)
+                              const formData = new FormData()
+                              formData.append('image', file)
+                              fetch('/api/upload-theme-image', {
+                                method: 'POST',
+                                body: formData,
+                              })
+                              .then(res => res.json())
+                              .then(result => {
+                                if (result.success) {
+                                  setEditThemeData({...editThemeData, image: result.imageUrl})
+                                } else {
+                                  alert(result.error || 'Erreur lors de l\'upload')
+                                }
+                              })
+                              .catch(error => {
+                                console.error('Erreur upload:', error)
+                                alert('Erreur lors de l\'upload du fichier')
+                              })
+                              .finally(() => setIsUploadingTheme(false))
+                            }
+                          }}
+                        />
+                      </label>
+                      {editThemeData.image && (
+                        <div className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                          <img 
+                            src={editThemeData.image || '/api/placeholder/64/64?text=Theme'} 
+                            alt="Preview"
+                            className="w-12 h-12 object-cover rounded-lg"
+                          />
+                          <span className="text-xs text-gray-600 flex-grow truncate">{editThemeData.image}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={saveEditTheme}
+                        className="flex-1 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center gap-2"
+                      >
+                        <Check className="h-4 w-4" />
+                        Sauvegarder
+                      </button>
+                      <button
+                        onClick={cancelEditTheme}
+                        className="flex-1 px-3 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // Mode affichage
+                  <>
+                    <div className="flex items-center gap-3">
+                      <img 
+                        src={theme.image || '/api/placeholder/64/64?text=Theme'} 
+                        alt={theme.name}
+                        className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                      />
+                      <div className="flex-grow">
+                        <h4 className="text-gray-900 font-semibold text-lg">{theme.name}</h4>
+                        {theme.description && (
+                          <p className="text-gray-600 text-sm mt-1">{theme.description}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => startEditTheme(theme)}
+                        className="text-green-600 hover:text-green-800 transition-colors p-2"
+                        title="Modifier"
+                      >
+                        <Edit2 className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => removeTheme(index)}
+                        className="text-red-500 hover:text-red-700 transition-colors p-2"
+                        title="Supprimer"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    {theme.aiIndication && (
+                      <div className="mt-3 bg-green-100 p-2 rounded border border-green-200">
+                        <p className="text-xs text-green-700 font-medium mb-1 flex items-center gap-1">
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                          </svg>
+                          Indication IA:
+                        </p>
+                        <p className="text-green-800 text-sm italic">{theme.aiIndication}</p>
+                      </div>
                     )}
-                  </div>
-                  <button
-                    onClick={() => removeTheme(index)}
-                    className="text-red-500 hover:text-red-700 transition-colors p-2"
-                    title="Supprimer"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                {theme.aiIndication && (
-                  <div className="mt-3 bg-green-100 p-2 rounded border border-green-200">
-                    <p className="text-xs text-green-700 font-medium mb-1 flex items-center gap-1">
-                      <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                      </svg>
-                      Indication IA:
-                    </p>
-                    <p className="text-green-800 text-sm italic">{theme.aiIndication}</p>
-                  </div>
+                  </>
                 )}
               </div>
             ))}
