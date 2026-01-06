@@ -20,7 +20,6 @@ yarn-error.log*
 .env*
 
 # database SQLite
-/database/
 *.db
 *.sqlite
 *.sqlite3
