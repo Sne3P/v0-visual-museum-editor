@@ -21,6 +21,8 @@ RUN apt-get update && apt-get install -y \
     g++ \
     libpq-dev \
     curl \
+    wget \
+    espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -61,6 +63,13 @@ COPY rag/ ./rag/
 COPY seed_narrations_dynamic.py .
 COPY seed_narrations.py .
 
+# Copier script init Piper
+COPY init-piper.sh /usr/local/bin/init-piper.sh
+RUN chmod +x /usr/local/bin/init-piper.sh
+
+# Télécharger modèles Piper TTS (PERMANENT - ne change pas)
+RUN /usr/local/bin/init-piper.sh
+
 # Exposer port Flask
 EXPOSE 5000
 
@@ -83,6 +92,13 @@ COPY rag/ ./rag/
 # Copier scripts de seed
 COPY seed_narrations_dynamic.py .
 COPY seed_narrations.py .
+
+# Copier script init Piper
+COPY init-piper.sh /usr/local/bin/init-piper.sh
+RUN chmod +x /usr/local/bin/init-piper.sh
+
+# Télécharger modèles Piper TTS
+RUN /usr/local/bin/init-piper.sh
 
 # User non-root pour sécurité
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

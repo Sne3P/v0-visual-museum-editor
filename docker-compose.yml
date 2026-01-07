@@ -1,0 +1,213 @@
+# ============================================
+# DOCKER COMPOSE - MUSEUM VOICE EDITOR
+# ============================================
+# Usage: docker-compose up -d
+# ============================================
+
+services:
+  # ==========================================
+  # SERVICE 1 : OLLAMA LLM LOCAL
+  # ==========================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: museum-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./scripts/ollama-entrypoint.sh:/usr/local/bin/ollama-entrypoint.sh:ro
+    networks:
+      - museum-network
+    entrypoint: ["/bin/bash", "/usr/local/bin/ollama-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list | grep -q mistral || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 8G  # Limite mémoire pour Ollama + Mistral
+
+  # ==========================================
+  # SERVICE 2 : POSTGRESQL DATABASE
+  # ==========================================
+  database:
+    image: postgres:16-alpine
+    container_name: museum-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: museumvoice
+      POSTGRES_USER: museum_admin
+      POSTGRES_PASSWORD: Museum@2026!Secure
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U museum_admin -d museumvoice"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - museum-network
+
+  # ==========================================
+  # SERVICE 2.5 : ADMINER (DATABASE UI)
+  # ==========================================
+  adminer:
+    image: adminer:latest
+    container_name: museum-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: database
+      ADMINER_DESIGN: pepa-linha-dark
+    depends_on:
+      - database
+    networks:
+      - museum-network
+
+  # ==========================================
+  # SERVICE 3 : BACKEND PYTHON FLASK + RAG
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: museum-backend
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      # Database PostgreSQL
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_NAME: museumvoice
+      DB_USER: museum_admin
+      DB_PASSWORD: Museum@2026!Secure
+      
+      # Flask
+      FLASK_ENV: development
+      FLASK_APP: rag.main_postgres
+      
+      # Ollama LOCAL
+      OLLAMA_API_URL: http://ollama:11434
+      OLLAMA_MODEL: mistral
+      
+      # LLM API Keys (non utilisées si Ollama actif)
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "5000:5000"
+    volumes:
+      - uploads_data:/app/uploads
+      - audio_data:/app/uploads/audio
+    networks:
+      - museum-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ==========================================
+  # SERVICE 4 : NEXT.JS EDITOR/DASHBOARD
+  # ==========================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: museum-app
+    restart: unless-stopped
+    depends_on:
+      database:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    environment:
+      # Database
+      DB_TYPE: postgresql
+      DB_HOST: database
+      DB_PORT: 5432
+      DB_NAME: museumvoice
+      DB_USER: museum_admin
+      DB_PASSWORD: Museum@2026!Secure
+      
+      # Backend API
+      BACKEND_API_URL: http://backend:5000
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:5000
+      
+      # Next.js
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: 1
+      
+      # App
+      NEXT_PUBLIC_API_URL: http://localhost:3000
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads_data:/app/public/uploads
+      - audio_data:/app/public/uploads/audio
+    networks:
+      - museum-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================
+  # SERVICE 5 : REACT FRONTEND CLIENT
+  # ==========================================
+  client:
+    build:
+      context: ./museum-voice
+      dockerfile: Dockerfile
+    container_name: museum-client
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    volumes:
+      - audio_data:/usr/share/nginx/html/uploads/audio:ro
+    networks:
+      - museum-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ==========================================
+# VOLUMES PERSISTANTS
+# ==========================================
+volumes:
+  postgres_data:
+    name: museum-postgres-data
+  uploads_data:
+    name: museum-uploads-data
+  audio_data:
+    name: museum-audio-data
+  ollama_data:
+    name: museum-ollama-models
+
+# ==========================================
+# RÉSEAU INTERNE
+# ==========================================
+networks:
+  museum-network:
+    name: museum-network
+    driver: bridge
