@@ -12,8 +12,6 @@ class OllamaMediationSystem:
     """
     Système de génération de médiations avec Ollama (inspiré du style de ton script).
     Flux: (optionnel) setup → préparation entrée → génération par combinaisons → stats.
-
-    ⚠️ Ici, pas de RAG/BDD : on reste au plus proche de TON code initial (ollama + prompt).
     """
 
     def __init__(
@@ -63,8 +61,7 @@ class OllamaMediationSystem:
     @staticmethod
     def formater_parametres_criteres(combinaison: Dict[str, Dict[str, Any]]) -> str:
         """
-        Transforme le dictionnaire de combinaison en texte formaté pour le prompt.
-        data ressemble à : {'name': 'Enfant', 'description': '...', 'id': 1}
+        Transforme le dictionnaire en directives de style impératives.
         """
         instructions = []
         for type_critere, data in combinaison.items():
@@ -72,17 +69,16 @@ class OllamaMediationSystem:
             desc = data.get("description", "")
             ai_indication = data.get("ai_indication", "")
             
-            # Formatage plus impératif pour le LLM
-            instructions.append(f" CONTRAINTE : {type_critere.upper()} : {nom}")
-            
-            # On ajoute la description si elle existe (C'est ce qui manquait)
+            # On construit un bloc identitaire fort
+            bloc = f"TYPE DE {type_critere.upper()} : {nom}.\n"
             if desc:
-                instructions.append(f"   (Définition : {desc})")
-            
+                bloc += f"   CONTEXTE : {desc}\n"
             if ai_indication:
-                instructions.append(f"- INSTRUCTION STYLE : {ai_indication}")
+                bloc += f"   ORDRE DE STYLE : {ai_indication}\n"
             else:
-                instructions.append(f"- Adapte le ton pour correspondre à : {nom}")
+                bloc += f"   ORDRE DE STYLE : Adopte le vocabulaire, le rythme et les tournures typiques de : {nom}.\n"
+                
+            instructions.append(bloc)
 
         return "\n".join(instructions)
     
@@ -145,7 +141,7 @@ class OllamaMediationSystem:
             "options": {
                 "temperature": self.temperature if temperature is None else temperature,
                 "num_predict": self.num_predict,
-                "num_threads": 4,
+                "num_threads": 8,
             },
         }
         r = requests.post(url, json=payload, timeout=(timeout_s or self.timeout_s))
@@ -209,22 +205,22 @@ class OllamaMediationSystem:
         duree_minutes: int = 3,
     ) -> List[Dict[str, str]]:
         bloc_criteres = self.formater_parametres_criteres(combinaison)
+        
+        # target_word_count = int(duree_minutes * 130)
+        # word_range = f"{target_word_count - 20} à {target_word_count + 20}"
 
         system = (
-            "Role : Tu es un guide de musée expert, capable d'improviser des visites captivantes."
-            "Contexte : Le visiteur est DEBOUT devant l'œuvre. Il la regarde en ce moment même."
-            "Tu respectes STRICTEMENT la contrainte : aucune info externe, aucune invention."
-            " Objectif : Tu écris pour l’oral, écris un script d'audioguide avec phrases claires, progressives, fluides."
+            "Tu es un guide de musée expert, un caméléon capable d'adapter radicalement ton discours."
+            "Ton objectif est de produire un script d'audioguide destiné à être lu à voix haute."
+            "Tu as deux contraintes absolues :"
+            "1. VÉRACITÉ : Tu ne dois JAMAIS inventer de faits. Utilise uniquement la source fournie."
+            "2. ADAPTATION : Tu dois incarner totalement la 'persona' demandée dans les instructions."
         )
 
         user = f"""
         PARAMÈTRES
         - Langue : Français
         - Durée cible : {duree_minutes} minute(s)
-
-        --- INSTRUCTIONS DE PERSONNALISATION (CRUCIAL) ---
-        Tu dois modifier radicalement ton vocabulaire et ton approche selon ces règles :
-        {bloc_criteres}
 
         SOURCE UNIQUE
         Utilise UNIQUEMENT les informations présentes dans l’entrée d’œuvre ci-dessous.
@@ -243,13 +239,17 @@ class OllamaMediationSystem:
         - Description guidée (ce qu'on voit).
         - Contexte/Sens (ce qui est compris à travers le filtre thématique choisi).
         - Conclusion ouverte.
+        
+        INSTRUCTIONS DE PERSONNALISATION (CRUCIAL)
+        Tu dois modifier radicalement ton vocabulaire et ton approche selon ces règles :
+        {bloc_criteres}
     
 
         SORTIE ATTENDUE (TEXTE UNIQUEMENT)
         Écris un texte de MEDIATION AUDIOGUIDE prêt à être lu à voix haute.
         - Description progressive : de loin → de près → matière/lumière/geste → sens (uniquement si présent)
         - Aucun astérisque, aucune didascalie, aucun geste
-        - Ton sobre et accessible
+        - Ton sobre et accessible adapté à un large public
         - Pas d’injonctions émotionnelles (“ressentez”, “imaginez”…)
         - PAS de titres, PAS de listes,  PAS dse Markdown (ni gras, ni italique)
         - Longueur adaptée à {duree_minutes} minute(s) de lecture (approx. 120–160 mots/min)
