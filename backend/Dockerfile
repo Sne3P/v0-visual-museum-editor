@@ -49,9 +49,8 @@ FROM deps AS dev
 # Copier code backend (volume monté en dev, donc changements live)
 COPY rag/ ./rag/
 
-# Copier scripts de seed et utilitaires
+# Copier script de seed pour le dashboard admin
 COPY seed_narrations_dynamic.py .
-COPY seed_narrations.py .
 
 # Copier script init Piper
 COPY init-piper.sh /usr/local/bin/init-piper.sh
@@ -80,9 +79,8 @@ FROM deps AS production
 # Copier UNIQUEMENT le code backend (pas les deps - déjà dans deps stage)
 COPY rag/ ./rag/
 
-# Copier scripts de seed
+# Copier script de seed pour le dashboard admin
 COPY seed_narrations_dynamic.py .
-COPY seed_narrations.py .
 
 # Copier script init Piper
 COPY init-piper.sh /usr/local/bin/init-piper.sh
@@ -94,6 +92,10 @@ RUN sed -i 's/\r$//' /usr/local/bin/gunicorn-entrypoint.sh && chmod +x /usr/loca
 
 # Télécharger modèles Piper TTS
 RUN /usr/local/bin/init-piper.sh
+
+# Créer dossiers uploads AVANT changement utilisateur
+RUN mkdir -p /app/uploads/audio /app/uploads/pdfs && \
+    chmod -R 777 /app/uploads
 
 # User non-root pour sécurité
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

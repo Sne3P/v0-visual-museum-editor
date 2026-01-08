@@ -114,7 +114,12 @@ class PiperTTSService:
         output_file = os.path.join(parcours_dir, f"{output_filename}.wav")
         
         try:
+            print(f"🎤 [TTS DEBUG] Génération audio: {output_filename}")
+            print(f"   📝 [TTS DEBUG] Texte (100 premiers caractères): {text[:100]}...")
+            print(f"   📏 [TTS DEBUG] Longueur texte: {len(text)} caractères")
             logger.info(f"🎤 Génération audio: {output_filename}")
+            logger.info(f"   📝 Texte (100 premiers caractères): {text[:100]}...")
+            logger.info(f"   📏 Longueur texte: {len(text)} caractères")
             
             # Synthèse vocale
             audio_chunks = self.voice.synthesize(text)
@@ -176,6 +181,14 @@ class PiperTTSService:
             if not text:
                 logger.warning(f"⚠️ Pas de texte pour oeuvre {oeuvre_id}")
                 continue
+            
+            # DEBUG: Logger le texte COMPLET pour vérifier
+            logger.info(f"🔍 [TTS DEBUG] Génération audio: oeuvre_{oeuvre_id}")
+            logger.info(f"📝 [TTS DEBUG] Texte (100 premiers caractères): {text[:100]}")
+            logger.info(f"📏 [TTS DEBUG] Longueur totale: {len(text)} caractères")
+            if "lorem" in text.lower() or "ipsum" in text.lower():
+                logger.error(f"❌ [TTS DEBUG] LOREM IPSUM DETECTE dans oeuvre_{oeuvre_id}!")
+                logger.error(f"❌ [TTS DEBUG] Texte complet: {text[:500]}...")
             
             # Générer le nom de fichier
             filename = f"oeuvre_{oeuvre_id}"
