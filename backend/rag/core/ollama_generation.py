@@ -160,8 +160,8 @@ class OllamaMediationSystem:
     ) -> str:
         url = f"{self.ollama_url}/api/chat"
         
-        # Optimisation CPU : utiliser tous les cœurs disponibles (max 16)
-        num_threads = min(multiprocessing.cpu_count(), 16)
+        # Optimisation CPU : utiliser tous les cœurs disponibles (max 8)
+        num_threads = min(multiprocessing.cpu_count(), 8)
         
         payload = {
             "model": model,
@@ -170,11 +170,7 @@ class OllamaMediationSystem:
             "options": {
                 "temperature": self.temperature if temperature is None else temperature,
                 "num_predict": self.num_predict,
-<<<<<<< HEAD
-                "num_threads": num_threads,  # ⚡ OPTIMISÉ : Utilise tous les CPU cores
-=======
-                "num_threads": 8,
->>>>>>> ef6d392ababeee71a978571dbf3f8bc135faf0ee
+                "num_threads": num_threads,
             },
         }
         r = requests.post(url, json=payload, timeout=(timeout_s or self.timeout_s))
@@ -241,13 +237,20 @@ class OllamaMediationSystem:
         
         # target_word_count = int(duree_minutes * 130)
         # word_range = f"{target_word_count - 20} à {target_word_count + 20}"
+        
+        if "enfant" in bloc_criteres.lower():
+            duree_minutes = 1.30
+        else : 
+            duree_minutes = 3
 
         system = (
             "Tu es un guide de musée expert, un caméléon capable d'adapter radicalement ton discours."
             "Ton objectif est de produire un script d'audioguide destiné à être lu à voix haute."
-            "Tu as deux contraintes absolues :"
-            "1. VÉRACITÉ : Tu ne dois JAMAIS inventer de faits. Utilise uniquement la source fournie."
-            "2. ADAPTATION : Tu dois incarner totalement la 'persona' demandée dans les instructions."
+            "NE METS RIEN entre parenthèses (...) ou entre étoiles *...*."
+            "Ne commence JAMAIS par *(Ton chaleureux)* ou ce genre d'indication."
+            "Le texte doit être prêt à être lu tel quel par un acteur."
+            "1. VÉRACITÉ : Utilise uniquement la source fournie. N'invente rien."
+            "2. ADAPTATION : Incarne le style demandé par le choix des mots, pas par des indications entre parenthèses."
         )
 
         user = f"""
@@ -280,12 +283,15 @@ class OllamaMediationSystem:
 
         SORTIE ATTENDUE (TEXTE UNIQUEMENT)
         Écris un texte de MEDIATION AUDIOGUIDE prêt à être lu à voix haute.
+        - Commence DIRECTEMENT par la première phrase parlée.
+        - INTERDIT : Pas de (parenthèses) ou *astérisques* décrivant l'ambiance.
+        - INTERDIT : Pas de tîtres 
+        - Pas de Markdown (gras, italique).
         - Description progressive : de loin → de près → matière/lumière/geste → sens (uniquement si présent)
-        - Aucun astérisque, aucune didascalie, aucun geste
         - Ton sobre et accessible adapté à un large public
         - Pas d’injonctions émotionnelles (“ressentez”, “imaginez”…)
-        - PAS de titres, PAS de listes,  PAS dse Markdown (ni gras, ni italique)
-        - Longueur adaptée à {duree_minutes} minute(s) de lecture (approx. 120–160 mots/min)
+        - Longueur adaptée à {duree_minutes} minute(s) de lecture (Ex : 120–160 mots/min)
+        - Un texte continu, fluide, sans aucun métalangage. Imagine que tu écris directement dans le prompteur de l'acteur.
         """.strip()
 
         return [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -389,7 +395,6 @@ class OllamaMediationSystem:
             #     continue
             
             # if not force_regenerate:
-                # existing = self._check_existing(oeuvre_id, age, theme, style)
             existing = self._check_existing(oeuvre_id, combinaison)
             if existing:
                 stats['skipped'] += 1
@@ -420,13 +425,13 @@ class OllamaMediationSystem:
                 print("texte généré : " + res["text"])
                 
                 # SAUVEGARDER
+                text_clean = res["text"].replace("*", "")
+                
                 pregen_id = add_pregeneration(
                     oeuvre_id=oeuvre_id,
                     criteria_dict=combinaison,
-                    pregeneration_text=res["text"]
+                    pregeneration_text=text_clean
                 )
-                
-                
                 
                 
                 if pregen_id:
