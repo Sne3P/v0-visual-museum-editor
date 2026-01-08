@@ -48,9 +48,16 @@ export async function GET() {
       }
     }
 
+    // Create floor ID mapping (plan_id -> floor-{index})
+    const floorIdMap = new Map<number, string>()
+    plans.forEach((plan: any, index: number) => {
+      floorIdMap.set(plan.plan_id, `floor-${index + 1}`)
+    })
+
     // Reconstruct floors from database
     const floors = plans.map((plan: any, index: number) => {
       const planEntities = entities.filter((e: any) => e.plan_id === plan.plan_id)
+      const currentFloorId = floorIdMap.get(plan.plan_id)!
 
       // ROOMS
       const rooms = planEntities
@@ -147,7 +154,7 @@ export async function GET() {
           }
         })
 
-      // VERTICAL LINKS
+      // VERTICAL LINKS - Only those physically ON this floor's plan
       const verticalLinks = planEntities
         .filter((e: any) => e.entity_type === 'VERTICAL_LINK')
         .map((entity: any) => {
@@ -157,13 +164,30 @@ export async function GET() {
           
           const metadata = parseMetadata(entity.description)
           
+          // Reconstruct connectedFloorIds with new sequential floor IDs
+          const originalConnectedFloorIds = metadata.connectedFloorIds || []
+          const newConnectedFloorIds = originalConnectedFloorIds.map((oldId: string) => {
+            // Find the plan that matches this old ID
+            const matchingPlan = plans.find((p: any, idx: number) => {
+              const oldFloorId = `floor-${p.plan_id}`
+              const newFloorId = `floor-${idx + 1}`
+              // Match by plan_id in the old ID or by position
+              return oldId === oldFloorId || oldId.includes(`-${p.plan_id}`) || oldId === newFloorId
+            })
+            if (matchingPlan) {
+              const matchingIndex = plans.indexOf(matchingPlan)
+              return `floor-${matchingIndex + 1}`
+            }
+            return oldId
+          })
+          
           return {
             id: metadata.id || `vlink-${entity.entity_id}`,
             type: metadata.type || 'stairs',
-            floorId: metadata.floorId || `floor-${plan.plan_id}`,
+            floorId: currentFloorId,
             position: linkPoints.length > 0 ? { x: linkPoints[0].x, y: linkPoints[0].y } : { x: 0, y: 0 },
             size: metadata.size || [80, 120],
-            connectedFloorIds: metadata.connectedFloorIds || [],
+            connectedFloorIds: newConnectedFloorIds,
             roomId: metadata.roomId,
             linkGroupId: metadata.linkGroupId,
             linkNumber: metadata.linkNumber
@@ -210,7 +234,7 @@ export async function GET() {
         })
 
       return {
-        id: `floor-${plan.plan_id}`,
+        id: currentFloorId,
         name: plan.nom,
         description: plan.description || '',
         rooms,

@@ -1,1 +1,0 @@
-# Module de prégénération de contenu personnalisé

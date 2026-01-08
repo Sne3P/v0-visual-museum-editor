@@ -331,8 +331,8 @@ export function executeDupliquer(
         id: uuidv4(),
         roomId: newRoomId,
         segment: [
-          snapToGrid({ x: door.segment[0].x + deltaX, y: door.segment[0].y + deltaY }, GRID_SIZE),
-          snapToGrid({ x: door.segment[1].x + deltaX, y: door.segment[1].y + deltaY }, GRID_SIZE)
+          snapToGrid({ x: door.segment[0].x + deltaX, y: door.segment[0].y + deltaY }, 1),
+          snapToGrid({ x: door.segment[1].x + deltaX, y: door.segment[1].y + deltaY }, 1)
         ] as const
       }))
       updatedFloor = { ...updatedFloor, doors: [...(updatedFloor.doors || []), ...newDoors] }

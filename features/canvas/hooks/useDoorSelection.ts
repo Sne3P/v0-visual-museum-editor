@@ -58,14 +58,14 @@ export function useDoorSelection({
     const door = currentFloor.doors.find(d => d.id === doorId)
     if (!door) return
 
-    // Convertir coordonnées grille -> pixels
+    // Les doors sont déjà en pixels
     const startPixels = {
-      x: door.segment[0].x * GRID_SIZE,
-      y: door.segment[0].y * GRID_SIZE
+      x: door.segment[0].x,
+      y: door.segment[0].y
     }
     const endPixels = {
-      x: door.segment[1].x * GRID_SIZE,
-      y: door.segment[1].y * GRID_SIZE
+      x: door.segment[1].x,
+      y: door.segment[1].y
     }
 
     // Vérifier quelle partie est cliquée
@@ -238,14 +238,14 @@ function translateDoorAlongSegment(
   targetPoint: Point,
   wallSegment: readonly [Point, Point]
 ): Door | null {
-  // wallSegment est en unités de grille, convertir en pixels pour calculs
+  // wallSegment et door.segment sont déjà en pixels
   const wallStart = {
-    x: wallSegment[0].x * GRID_SIZE,
-    y: wallSegment[0].y * GRID_SIZE
+    x: wallSegment[0].x,
+    y: wallSegment[0].y
   }
   const wallEnd = {
-    x: wallSegment[1].x * GRID_SIZE,
-    y: wallSegment[1].y * GRID_SIZE
+    x: wallSegment[1].x,
+    y: wallSegment[1].y
   }
 
   // Projeter le point cible (en pixels) sur le segment du mur (en pixels)
@@ -261,8 +261,8 @@ function translateDoorAlongSegment(
   const ux = dx / length
   const uy = dy / length
 
-  // Demi-largeur de la porte en pixels
-  const halfWidth = (door.width / 0.5) * GRID_SIZE / 2
+  // Demi-largeur de la porte en pixels (door.width en mètres, 0.5m = 40px)
+  const halfWidth = (door.width * 80) / 2
 
   // Nouveaux points de la porte en pixels
   const newStartPixels = {
@@ -275,15 +275,15 @@ function translateDoorAlongSegment(
     y: projectedPoint.y + uy * halfWidth
   }
 
-  // Convertir en unités de grille et snapper
+  // Garder en pixels, snapper légèrement
   const newStart: Point = snapToGrid({
-    x: newStartPixels.x / GRID_SIZE,
-    y: newStartPixels.y / GRID_SIZE
+    x: newStartPixels.x,
+    y: newStartPixels.y
   }, 1)
 
   const newEnd: Point = snapToGrid({
-    x: newEndPixels.x / GRID_SIZE,
-    y: newEndPixels.y / GRID_SIZE
+    x: newEndPixels.x,
+    y: newEndPixels.y
   }, 1)
 
   return {

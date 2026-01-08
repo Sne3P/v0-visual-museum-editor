@@ -107,14 +107,14 @@ export function drawDoorPreview(
   gridSize: number = GRID_SIZE,
   isValid: boolean = false
 ) {
-  // Convertir coordonnées grille -> pixels -> canvas
+  // Convertir coordonnées pixels -> canvas (door.segment déjà en pixels)
   const startCanvas = worldToCanvas(
-    { x: door.segment[0].x * gridSize, y: door.segment[0].y * gridSize },
+    { x: door.segment[0].x, y: door.segment[0].y },
     zoom,
     pan
   )
   const endCanvas = worldToCanvas(
-    { x: door.segment[1].x * gridSize, y: door.segment[1].y * gridSize },
+    { x: door.segment[1].x, y: door.segment[1].y },
     zoom,
     pan
   )

@@ -68,7 +68,7 @@ const Resume = () => {
         <>
             <ResumeProgressBar 
                 completed={currentIndex + 1} 
-                total={metadata.artwork_count} 
+                total={metadata.total_artworks} 
                 timeLeft={timeLeft}
             />
             
@@ -149,7 +149,7 @@ const Resume = () => {
                 </button>
                 
                 <span style={{ fontSize: '16px', alignSelf: 'center' }}>
-                    {currentIndex + 1} / {metadata.artwork_count}
+                    {currentIndex + 1} / {metadata.total_artworks}
                 </span>
                 
                 <button 

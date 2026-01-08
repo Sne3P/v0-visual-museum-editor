@@ -150,9 +150,9 @@ export function useDoorCreation({
     const projectedEnd = projectPointOntoSegment(snappedPoint, wallStart, wallEnd)
     
     // Calculer largeur en pixels puis convertir en mètres
-    // Formule : (pixels / GRID_SIZE) * GRID_TO_METERS où GRID_TO_METERS = 0.5
+    // Formule: 40 pixels = 0.5m donc pixels * 0.5 / 40 = pixels / 80
     const doorWidthPixels = distance(projectedStart, projectedEnd)
-    const doorWidthMeters = (doorWidthPixels / GRID_SIZE) * 0.5
+    const doorWidthMeters = doorWidthPixels / 80
     
     // Vérifier si la largeur est suffisante pour créer la porte
     if (doorWidthMeters < CONSTRAINTS.door.minWidth) {
@@ -169,8 +169,8 @@ export function useDoorCreation({
     // Clamper entre min et max pour la création effective
     const doorWidth = Math.min(CONSTRAINTS.door.maxWidth, doorWidthMeters)
 
-    // Convertir mètres -> pixels : (mètres / 0.5) * GRID_SIZE
-    const halfWidth = (doorWidth / 0.5) * GRID_SIZE / 2
+    // Convertir mètres -> pixels : mètres * 80 (car 0.5m = 40px)
+    const halfWidth = (doorWidth * 80) / 2
     const dx = wallEnd.x - wallStart.x
     const dy = wallEnd.y - wallStart.y
     const length = Math.sqrt(dx * dx + dy * dy)
@@ -184,15 +184,15 @@ export function useDoorCreation({
     const centerX = (projectedStart.x + projectedEnd.x) / 2
     const centerY = (projectedStart.y + projectedEnd.y) / 2
     
-    // Points de la porte EN UNITÉS DE GRILLE (diviser par GRID_SIZE)
+    // Points de la porte EN PIXELS (garder tel quel)
     const doorStart: Point = {
-      x: Math.round((centerX - ux * halfWidth) / GRID_SIZE),
-      y: Math.round((centerY - uy * halfWidth) / GRID_SIZE)
+      x: Math.round(centerX - ux * halfWidth),
+      y: Math.round(centerY - uy * halfWidth)
     }
     
     const doorEnd: Point = {
-      x: Math.round((centerX + ux * halfWidth) / GRID_SIZE),
-      y: Math.round((centerY + uy * halfWidth) / GRID_SIZE)
+      x: Math.round(centerX + ux * halfWidth),
+      y: Math.round(centerY + uy * halfWidth)
     }
 
     // Créer la preview de porte

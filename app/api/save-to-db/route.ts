@@ -179,9 +179,22 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Insert relations
+      // Insert relations (with deduplication for DOOR relations)
       if (exportData.plan_editor.relations) {
+        // Dédupliquer les relations DOOR bidirectionnelles
+        const seenDoorPairs = new Set<string>()
+        
         for (const relation of exportData.plan_editor.relations) {
+          // Pour les portes, dédupliquer les paires bidirectionnelles
+          if (relation.type_relation === 'DOOR') {
+            const pair = [relation.source_id, relation.cible_id].sort().join('-')
+            if (seenDoorPairs.has(pair)) {
+              console.log(`⏭️  Doublon DOOR ignoré: ${relation.source_id} ↔ ${relation.cible_id}`)
+              continue  // Skip doublon
+            }
+            seenDoorPairs.add(pair)
+          }
+          
           await client.query(
             'INSERT INTO relations (relation_id, source_id, cible_id, type_relation) VALUES ($1, $2, $3, $4)',
             [relation.relation_id, relation.source_id, relation.cible_id, relation.type_relation]

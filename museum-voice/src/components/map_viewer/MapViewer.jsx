@@ -2,38 +2,29 @@ import React, { useEffect, useState, useRef } from 'react';
 import './MapViewer.css';
 
 const MapViewer = ({ parcours, currentIndex }) => {
-    const [mapData, setMapData] = useState(null);
+    const [floorPlanData, setFloorPlanData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [currentFloor, setCurrentFloor] = useState(0);
     const [viewBox, setViewBox] = useState({ x: 0, y: 0, width: 1000, height: 800 });
     const svgRef = useRef(null);
     const [isPanning, setIsPanning] = useState(false);
     const [panStart, setPanStart] = useState({ x: 0, y: 0 });
     const [scale, setScale] = useState(1);
+    const [touchStartDist, setTouchStartDist] = useState(0);
 
     useEffect(() => {
         if (!parcours || !parcours.artworks) return;
 
-        // Préparer les données pour l'API
-        const artworks = parcours.artworks.map(artwork => ({
-            oeuvre_id: artwork.oeuvre_id,
-            order: artwork.order
-        }));
-
-        // Récupérer les données du plan
-        fetch('/api/parcours/map', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ artworks })
-        })
+        // Récupérer le plan du musée
+        fetch(`${process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000'}/api/museum/floor-plan`)
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    setMapData(data.map_data);
+                    setFloorPlanData(data);
                     
-                    // Calculer le viewBox optimal
+                    // Calculer le viewBox optimal pour tous les points
                     const allPoints = [];
-                    data.map_data.artworks.forEach(a => allPoints.push({ x: a.x, y: a.y }));
-                    data.map_data.rooms.forEach(room => {
+                    data.rooms.forEach(room => {
                         room.polygon_points.forEach(p => allPoints.push(p));
                     });
 
@@ -52,6 +43,11 @@ const MapViewer = ({ parcours, currentIndex }) => {
                             height: maxY - minY
                         });
                     }
+
+                    // Définir l'étage de l'œuvre actuelle
+                    if (currentIndex >= 0 && currentIndex < parcours.artworks.length) {
+                        setCurrentFloor(parcours.artworks[currentIndex].position.floor);
+                    }
                 }
                 setLoading(false);
             })
@@ -61,7 +57,17 @@ const MapViewer = ({ parcours, currentIndex }) => {
             });
     }, [parcours]);
 
-    // Gestion du zoom avec useEffect pour éviter l'erreur passive listener
+    // Mettre à jour l'étage affiché selon l'œuvre actuelle
+    useEffect(() => {
+        if (parcours && currentIndex >= 0 && currentIndex < parcours.artworks.length) {
+            const floor = parcours.artworks[currentIndex].position?.floor;
+            if (floor !== undefined && floor !== null) {
+                setCurrentFloor(floor);
+            }
+        }
+    }, [currentIndex, parcours]);
+
+    // Gestion du zoom avec molette (desktop)
     useEffect(() => {
         const svg = svgRef.current;
         if (!svg) return;
@@ -104,26 +110,118 @@ const MapViewer = ({ parcours, currentIndex }) => {
         setIsPanning(false);
     };
 
+    // Gestion zoom pinch (mobile)
+    const handleTouchStart = (e) => {
+        if (e.touches.length === 2) {
+            const dist = getTouchDistance(e.touches[0], e.touches[1]);
+            setTouchStartDist(dist);
+        } else if (e.touches.length === 1) {
+            setPanStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+            setIsPanning(true);
+        }
+    };
+
+    const handleTouchMove = (e) => {
+        if (e.touches.length === 2 && touchStartDist > 0) {
+            e.preventDefault();
+            const dist = getTouchDistance(e.touches[0], e.touches[1]);
+            const delta = dist / touchStartDist;
+            setScale(prev => Math.max(0.5, Math.min(3, prev * delta)));
+            setTouchStartDist(dist);
+        } else if (e.touches.length === 1 && isPanning) {
+            const dx = (e.touches[0].clientX - panStart.x) * (viewBox.width / 800) / scale;
+            const dy = (e.touches[0].clientY - panStart.y) * (viewBox.height / 600) / scale;
+            
+            setViewBox(prev => ({
+                ...prev,
+                x: prev.x - dx,
+                y: prev.y - dy
+            }));
+            
+            setPanStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
+        }
+    };
+
+    const handleTouchEnd = () => {
+        setIsPanning(false);
+        setTouchStartDist(0);
+    };
+
+    const getTouchDistance = (touch1, touch2) => {
+        const dx = touch1.clientX - touch2.clientX;
+        const dy = touch1.clientY - touch2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    };
+
     if (loading) {
         return <div className="map-viewer-loading">Chargement du plan...</div>;
     }
 
-    if (!mapData) {
+    if (!floorPlanData || !parcours) {
         return <div className="map-viewer-error">Plan non disponible</div>;
     }
 
     const currentArtwork = parcours.artworks[currentIndex];
+    const floors = parcours.metadata?.floors_list || [0];
+    const hasMultipleFloors = floors.length > 1;
+
+    // Filtrer les salles de l'étage actuel
+    const roomsOnFloor = floorPlanData.rooms.filter(r => r.floor === currentFloor);
+
+    // Filtrer artworks de l'étage actuel
+    const artworksOnFloor = parcours.artworks.filter(a => a.position.floor === currentFloor);
+    
+    // Filtrer segments : SEULEMENT ceux où from ET to sont sur le même étage (currentFloor)
+    // Les segments inter-étages (escaliers) ne doivent pas s'afficher
+    const segmentsOnFloor = (parcours.path_segments || []).filter(s => 
+        s.from.floor === currentFloor && s.to.floor === currentFloor
+    );
+    
+    // Déterminer quels segments sont "en cours" (entre œuvre actuelle et suivante)
+    // IMPORTANT : Le segment bleu s'affiche sur TOUS les étages où il y a des segments
+    // avec segment_index === currentIndex (pas seulement l'étage de l'œuvre actuelle)
+    // Exemple : Œuvre 4 (étage 0) → Œuvre 5 (étage 1)
+    //   - Segments avec segment_index=3 à l'étage 0 (vers escalier) → BLEU
+    //   - Segments avec segment_index=3 à l'étage 1 (depuis escalier) → BLEU
+    const currentSegmentIndexes = [];
+    if (currentIndex < parcours.artworks.length - 1) {
+        currentSegmentIndexes.push(currentIndex);
+    }
+    
+    // Nom de l'étage pour l'affichage
+    const floorName = currentFloor === 0 ? 'RDC' : 
+                      currentFloor > 0 ? `Étage ${currentFloor}` : 
+                      `Sous-sol ${Math.abs(currentFloor)}`;
 
     return (
         <div className="map-viewer-container">
             <div className="map-viewer-header">
-                <h3>Plan du musée</h3>
+                <h3>Plan du musée{hasMultipleFloors ? ` - ${floorName}` : ''}</h3>
                 <div className="map-controls">
-                    <button onClick={() => setScale(prev => Math.min(3, prev * 1.2))}>➕</button>
-                    <button onClick={() => setScale(prev => Math.max(0.5, prev * 0.8))}>➖</button>
+                    <button onClick={() => setScale(prev => Math.min(3, prev * 1.2))}>+</button>
+                    <button onClick={() => setScale(prev => Math.max(0.5, prev * 0.8))}>-</button>
                     <button onClick={() => setScale(1)}>Reset</button>
                 </div>
             </div>
+
+            {hasMultipleFloors && (
+                <div className="floor-selector">
+                    {floors.map(floor => {
+                        const floorLabel = floor === 0 ? 'RDC' : 
+                                         floor > 0 ? `Étage ${floor}` : 
+                                         `SS ${Math.abs(floor)}`;
+                        return (
+                            <button
+                                key={floor}
+                                className={`floor-button ${floor === currentFloor ? 'active' : ''}`}
+                                onClick={() => setCurrentFloor(floor)}
+                            >
+                                {floorLabel}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
             
             <svg
                 ref={svgRef}
@@ -133,10 +231,13 @@ const MapViewer = ({ parcours, currentIndex }) => {
                 onMouseMove={handleMouseMove}
                 onMouseUp={handleMouseUp}
                 onMouseLeave={handleMouseUp}
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
             >
                 {/* Dessiner les salles */}
-                {mapData.rooms.map(room => (
-                    <g key={room.room_id}>
+                {roomsOnFloor.map(room => (
+                    <g key={room.entity_id}>
                         <polygon
                             points={room.polygon_points.map(p => `${p.x},${p.y}`).join(' ')}
                             className="room-polygon"
@@ -159,29 +260,83 @@ const MapViewer = ({ parcours, currentIndex }) => {
                     </g>
                 ))}
 
-                {/* Dessiner les connexions entre œuvres (chemin) */}
-                {mapData.artworks.length > 1 && (
-                    <polyline
-                        points={mapData.artworks.map(a => `${a.x},${a.y}`).join(' ')}
-                        className="parcours-path"
-                        fill="none"
-                        stroke="#5dace2"
-                        strokeWidth="2"
-                        strokeDasharray="5,5"
-                    />
-                )}
+                {/* Dessiner TOUS les segments du parcours */}
+                {segmentsOnFloor.map((segment, idx) => {
+                    // Déterminer la couleur selon si c'est le prochain segment
+                    const isCurrentSegment = currentSegmentIndexes.includes(segment.segment_index);
+                    const isPastSegment = segment.segment_index < currentIndex;
+                    
+                    let strokeColor = '#ccc'; // Gris clair par défaut (à venir)
+                    let strokeOpacity = 0.5;
+                    
+                    if (isCurrentSegment) {
+                        strokeColor = '#5dace2'; // Bleu pour le prochain segment
+                        strokeOpacity = 1;
+                    } else if (isPastSegment) {
+                        strokeColor = '#888'; // Gris foncé pour les segments déjà visités
+                        strokeOpacity = 0.6;
+                    }
+                    
+                    return (
+                        <line
+                            key={`segment-${idx}`}
+                            x1={segment.from.x}
+                            y1={segment.from.y}
+                            x2={segment.to.x}
+                            y2={segment.to.y}
+                            stroke={strokeColor}
+                            strokeWidth={isCurrentSegment ? "4" : "2"}
+                            opacity={strokeOpacity}
+                        />
+                    );
+                })}
+
+                {/* Dessiner les waypoints (points verts sur TOUS les segments) */}
+                {segmentsOnFloor.map((segment, idx) => {
+                    // Si le 'from' ou 'to' est un waypoint, le dessiner
+                    const waypoints = [];
+                    
+                    if (segment.from.type === 'waypoint') {
+                        waypoints.push({
+                            x: segment.from.x,
+                            y: segment.from.y,
+                            type: 'door'
+                        });
+                    }
+                    
+                    if (segment.to.type === 'waypoint') {
+                        waypoints.push({
+                            x: segment.to.x,
+                            y: segment.to.y,
+                            type: 'door'
+                        });
+                    }
+                    
+                    return waypoints.map((waypoint, wpIdx) => (
+                        <circle
+                            key={`waypoint-${idx}-${wpIdx}`}
+                            cx={waypoint.x}
+                            cy={waypoint.y}
+                            r="5"
+                            fill="#4caf50"
+                            stroke="#fff"
+                            strokeWidth="2"
+                        />
+                    ));
+                })}
 
                 {/* Dessiner les œuvres */}
-                {mapData.artworks.map((artwork, idx) => {
+                {artworksOnFloor.map((artwork, idx) => {
                     const isCurrent = artwork.oeuvre_id === currentArtwork?.oeuvre_id;
-                    const isPast = idx < currentIndex;
+                    const isPast = artwork.order < (currentArtwork?.order || 0);
+                    const globalIdx = parcours.artworks.findIndex(a => a.oeuvre_id === artwork.oeuvre_id);
                     
                     return (
                         <g key={artwork.oeuvre_id}>
                             {/* Point de l'œuvre */}
                             <circle
-                                cx={artwork.x}
-                                cy={artwork.y}
+                                cx={artwork.position.x}
+                                cy={artwork.position.y}
                                 r={isCurrent ? 12 : 8}
                                 className={`artwork-point ${isCurrent ? 'current' : ''} ${isPast ? 'visited' : ''}`}
                                 fill={isCurrent ? '#ff0000' : isPast ? '#888' : '#5dace2'}
@@ -191,8 +346,8 @@ const MapViewer = ({ parcours, currentIndex }) => {
                             
                             {/* Numéro de l'ordre */}
                             <text
-                                x={artwork.x}
-                                y={artwork.y}
+                                x={artwork.position.x}
+                                y={artwork.position.y}
                                 className="artwork-order"
                                 textAnchor="middle"
                                 dominantBaseline="middle"
@@ -207,9 +362,9 @@ const MapViewer = ({ parcours, currentIndex }) => {
                             {isCurrent && (
                                 <g>
                                     <rect
-                                        x={artwork.x + 15}
-                                        y={artwork.y - 12}
-                                        width={artwork.title.length * 6 + 10}
+                                        x={artwork.position.x + 15}
+                                        y={artwork.position.y - 12}
+                                        width={Math.min(artwork.title.length * 6 + 10, 200)}
                                         height="24"
                                         fill="#ff0000"
                                         stroke="#fff"
@@ -217,14 +372,14 @@ const MapViewer = ({ parcours, currentIndex }) => {
                                         rx="3"
                                     />
                                     <text
-                                        x={artwork.x + 20}
-                                        y={artwork.y + 3}
+                                        x={artwork.position.x + 20}
+                                        y={artwork.position.y + 3}
                                         className="artwork-label"
                                         fill="#fff"
                                         fontSize="12"
                                         fontWeight="bold"
                                     >
-                                        {artwork.title}
+                                        {artwork.title.length > 30 ? artwork.title.substring(0, 30) + '...' : artwork.title}
                                     </text>
                                 </g>
                             )}
@@ -246,6 +401,16 @@ const MapViewer = ({ parcours, currentIndex }) => {
                     <div className="legend-color" style={{backgroundColor: '#888'}}></div>
                     <span>Œuvre visitée</span>
                 </div>
+                <div className="legend-item">
+                    <div className="legend-color" style={{backgroundColor: '#4caf50'}}></div>
+                    <span>Porte</span>
+                </div>
+                {hasMultipleFloors && (
+                    <div className="legend-item">
+                        <div className="legend-color" style={{backgroundColor: '#ff9800'}}></div>
+                        <span>Escalier</span>
+                    </div>
+                )}
             </div>
         </div>
     );

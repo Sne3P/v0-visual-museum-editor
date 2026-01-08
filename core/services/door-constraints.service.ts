@@ -54,15 +54,14 @@ export function isDoorStillValid(
   
   if (!otherRoom) return false
 
-  // Convertir les coordonnées de porte (grille) en pixels pour comparaison
-  const GRID_SIZE = 40
+  // Les doors sont déjà en pixels
   const doorStartPixels = {
-    x: door.segment[0].x * GRID_SIZE,
-    y: door.segment[0].y * GRID_SIZE
+    x: door.segment[0].x,
+    y: door.segment[0].y
   }
   const doorEndPixels = {
-    x: door.segment[1].x * GRID_SIZE,
-    y: door.segment[1].y * GRID_SIZE
+    x: door.segment[1].x,
+    y: door.segment[1].y
   }
 
   // Vérifier que les deux extrémités sont sur un edge du nouveau polygone

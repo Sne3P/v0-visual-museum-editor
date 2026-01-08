@@ -941,10 +941,13 @@ def generate_intelligent_parcours():
     """
     
     try:
-        from .parcours.intelligent_path_generator import generer_parcours_intelligent
+        # UTILISER V3
+        from .parcours.intelligent_parcours_v3 import generate_parcours_v3
         from .core.criteria_service import criteria_service
         from .tts import get_piper_service
         import time
+        
+        print("🔵 [PARCOURS] Utilisation de generate_parcours_v3 (V3)")
         
         data = request.get_json()
         
@@ -981,12 +984,14 @@ def generate_intelligent_parcours():
         variation_seed = data.get('variation_seed')
         generate_audio = data.get('generate_audio', True)
         
-        # Générer le parcours avec dict de critères
-        parcours_json = generer_parcours_intelligent(
-            criteria_dict=criteria_dict,
-            target_duration_minutes=target_duration,
-            variation_seed=variation_seed
+        # Générer le parcours avec V3
+        print(f"   📐 Génération parcours V3: profile={criteria_dict}, duration={target_duration}min, seed={variation_seed}")
+        parcours_json = generate_parcours_v3(
+            profile=criteria_dict,
+            target_duration_min=target_duration,
+            seed=variation_seed
         )
+        print(f"   ✅ Parcours V3 généré: {len(parcours_json.get('artworks', []))} œuvres")
         
         audio_result = {
             'generated': False,
@@ -1501,6 +1506,101 @@ def admin_delete_all_narrations():
         
     except Exception as e:
         print(f"❌ Erreur suppression narrations: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ===== MUSEUM FLOOR PLAN =====
+
+@app.route('/api/museum/floor-plan', methods=['GET'])
+def get_floor_plan():
+    """
+    Récupère le plan du musée (salles avec polygones) pour affichage
+    
+    Query params optionnels:
+        - floor: int (filtrer par étage)
+    
+    Returns:
+        {
+            "success": true,
+            "rooms": [
+                {
+                    "entity_id": 1,
+                    "name": "Salle 1",
+                    "floor": 0,
+                    "polygon_points": [{x, y}, ...]
+                },
+                ...
+            ]
+        }
+    """
+    try:
+        conn = _connect_postgres()
+        cur = conn.cursor()
+        
+        # Filtrer par étage si spécifié
+        floor_filter = request.args.get('floor')
+        
+        # D'abord, créer un mapping plan_id → floor_num
+        cur.execute("""
+            SELECT plan_id, nom 
+            FROM plans 
+            ORDER BY plan_id
+        """)
+        plan_to_floor = {}
+        for idx, row in enumerate(cur.fetchall()):
+            plan_to_floor[row['plan_id']] = idx
+        
+        # Récupérer les salles avec leurs polygones et plan_id
+        query = """
+            SELECT 
+                e.entity_id,
+                e.name,
+                e.plan_id,
+                array_agg(p.x ORDER BY p.ordre) as xs,
+                array_agg(p.y ORDER BY p.ordre) as ys
+            FROM entities e
+            LEFT JOIN points p ON e.entity_id = p.entity_id
+            WHERE e.entity_type = 'ROOM'
+            GROUP BY e.entity_id, e.name, e.plan_id
+            ORDER BY e.entity_id
+        """
+        
+        cur.execute(query)
+        rows = cur.fetchall()
+        
+        rooms = []
+        for row in rows:
+            # Utiliser plan_id pour déterminer l'étage
+            floor_num = plan_to_floor.get(row['plan_id'], 0)
+            
+            # Filtrer par étage si demandé
+            if floor_filter is not None and floor_num != int(floor_filter):
+                continue
+            
+            # Construire polygone
+            xs = row['xs'] or []
+            ys = row['ys'] or []
+            polygon_points = [{'x': x, 'y': y} for x, y in zip(xs, ys)]
+            
+            rooms.append({
+                'entity_id': row['entity_id'],
+                'name': row['name'],
+                'floor': floor_num,
+                'polygon_points': polygon_points
+            })
+        
+        cur.close()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'rooms': rooms
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Erreur récupération floor plan: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500

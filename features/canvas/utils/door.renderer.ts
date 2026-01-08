@@ -16,8 +16,8 @@ export function drawDoor(
   isHovered: boolean = false,
   isInvalid: boolean = false
 ) {
-  const start = worldToCanvas({ x: door.segment[0].x * gridSize, y: door.segment[0].y * gridSize }, zoom, pan)
-  const end = worldToCanvas({ x: door.segment[1].x * gridSize, y: door.segment[1].y * gridSize }, zoom, pan)
+  const start = worldToCanvas({ x: door.segment[0].x, y: door.segment[0].y }, zoom, pan)
+  const end = worldToCanvas({ x: door.segment[1].x, y: door.segment[1].y }, zoom, pan)
 
   const strokeColor = isInvalid
     ? COLORS.doorInvalid
@@ -109,8 +109,8 @@ export function drawDoorEndpoints(
   gridSize: number = 40,
   hoveredEndpoint?: "start" | "end"
 ) {
-  const start = worldToCanvas({ x: door.segment[0].x * gridSize, y: door.segment[0].y * gridSize }, zoom, pan)
-  const end = worldToCanvas({ x: door.segment[1].x * gridSize, y: door.segment[1].y * gridSize }, zoom, pan)
+  const start = worldToCanvas({ x: door.segment[0].x, y: door.segment[0].y }, zoom, pan)
+  const end = worldToCanvas({ x: door.segment[1].x, y: door.segment[1].y }, zoom, pan)
 
   const endpointRadius = 10 * zoom
   const strokeColor = COLORS.doorDefault

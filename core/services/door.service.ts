@@ -393,13 +393,13 @@ export function validateDoorPlacement(
       y: (existingDoor.segment[0].y + existingDoor.segment[1].y) / 2
     }
 
-    // Distance en unités de grille
-    const distGrid = distance(doorCenterGrid, existingCenterGrid)
+    // Distance en pixels
+    const distPixels = distance(doorCenterGrid, existingCenterGrid)
     
-    // Vérifier chevauchement : somme des demi-largeurs (en unités de grille)
-    const minDistGrid = (door.width + existingDoor.width) / (2 * 0.5) // Convertir mètres en grilles
+    // Vérifier chevauchement : somme des demi-largeurs en pixels (mètres * 80)
+    const minDistPixels = (door.width + existingDoor.width) * 80 / 2
     
-    if (distGrid < minDistGrid) {
+    if (distPixels < minDistPixels) {
       return { valid: false, message: "Chevauchement avec une autre porte" }
     }
   }
@@ -407,10 +407,10 @@ export function validateDoorPlacement(
   // Vérifier que la porte est bien sur un mur partagé
   const sharedWalls = findSharedWallSegments(floor)
   
-  // Convertir en pixels pour la comparaison avec les segments de murs
+  // doorCenterGrid est déjà en pixels
   const doorCenterPixels = {
-    x: doorCenterGrid.x * GRID_SIZE,
-    y: doorCenterGrid.y * GRID_SIZE
+    x: doorCenterGrid.x,
+    y: doorCenterGrid.y
   }
   
   const isOnSharedWall = sharedWalls.some(wall => {
@@ -505,13 +505,11 @@ export function validateDoorMove(
     const segStart = segment.segment[0]
     const segEnd = segment.segment[1]
     
-    // Convertir en coordonnées grille
-    const segStartGrid = { x: segStart.x / GRID_SIZE, y: segStart.y / GRID_SIZE }
-    const segEndGrid = { x: segEnd.x / GRID_SIZE, y: segEnd.y / GRID_SIZE }
+    // Tout est déjà en pixels
     
     // Vérifier si le centre de la porte est sur ce segment
     const dist = distanceToSegment(
-      { x: doorCenter.x * GRID_SIZE, y: doorCenter.y * GRID_SIZE },
+      { x: doorCenter.x, y: doorCenter.y },
       segStart,
       segEnd
     )
@@ -519,12 +517,12 @@ export function validateDoorMove(
     if (dist < 5) { // Tolérance 5 pixels
       // Vérifier que les deux points de la porte sont aussi sur le segment
       const dist1 = distanceToSegment(
-        { x: door.segment[0].x * GRID_SIZE, y: door.segment[0].y * GRID_SIZE },
+        { x: door.segment[0].x, y: door.segment[0].y },
         segStart,
         segEnd
       )
       const dist2 = distanceToSegment(
-        { x: door.segment[1].x * GRID_SIZE, y: door.segment[1].y * GRID_SIZE },
+        { x: door.segment[1].x, y: door.segment[1].y },
         segStart,
         segEnd
       )

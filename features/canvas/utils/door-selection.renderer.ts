@@ -17,14 +17,14 @@ export function drawSelectedDoor(
   pan: Point,
   editMode: 'move' | 'resize-start' | 'resize-end' | null
 ) {
-  // Convertir coordonnées grille -> pixels -> canvas
+  // Convertir coordonnées pixels -> canvas
   const startCanvas = worldToCanvas(
-    { x: door.segment[0].x * GRID_SIZE, y: door.segment[0].y * GRID_SIZE },
+    { x: door.segment[0].x, y: door.segment[0].y },
     zoom,
     pan
   )
   const endCanvas = worldToCanvas(
-    { x: door.segment[1].x * GRID_SIZE, y: door.segment[1].y * GRID_SIZE },
+    { x: door.segment[1].x, y: door.segment[1].y },
     zoom,
     pan
   )
@@ -117,12 +117,12 @@ export function drawDoorManipulationPreview(
   isValid: boolean
 ) {
   const startCanvas = worldToCanvas(
-    { x: door.segment[0].x * GRID_SIZE, y: door.segment[0].y * GRID_SIZE },
+    { x: door.segment[0].x, y: door.segment[0].y },
     zoom,
     pan
   )
   const endCanvas = worldToCanvas(
-    { x: door.segment[1].x * GRID_SIZE, y: door.segment[1].y * GRID_SIZE },
+    { x: door.segment[1].x, y: door.segment[1].y },
     zoom,
     pan
   )

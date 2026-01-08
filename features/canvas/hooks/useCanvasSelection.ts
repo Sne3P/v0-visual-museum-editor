@@ -138,11 +138,10 @@ export function useCanvasSelection(
 
     // PRIORITÉ 2 : HANDLES/ENDPOINTS DE PORTES (avant tout le reste pour manipulation)
     for (const door of currentFloor.doors) {
-      // Convertir coordonnées grille -> pixels
-      const GRID_SIZE = 40
+      // Les doors sont déjà en pixels
       const doorCenter = {
-        x: (door.segment[0].x + door.segment[1].x) / 2 * GRID_SIZE,
-        y: (door.segment[0].y + door.segment[1].y) / 2 * GRID_SIZE
+        x: (door.segment[0].x + door.segment[1].x) / 2,
+        y: (door.segment[0].y + door.segment[1].y) / 2
       }
       const dist = distance(point, doorCenter)
       
@@ -189,15 +188,14 @@ export function useCanvasSelection(
 
     // PRIORITÉ 4.5 : PORTES (avant segments de rooms, après artworks)
     for (const door of currentFloor.doors) {
-      // Convertir coordonnées grille -> pixels
-      const GRID_SIZE = 40
+      // Les doors sont déjà en pixels
       const doorStart = {
-        x: door.segment[0].x * GRID_SIZE,
-        y: door.segment[0].y * GRID_SIZE
+        x: door.segment[0].x,
+        y: door.segment[0].y
       }
       const doorEnd = {
-        x: door.segment[1].x * GRID_SIZE,
-        y: door.segment[1].y * GRID_SIZE
+        x: door.segment[1].x,
+        y: door.segment[1].y
       }
       
       const dist = distanceToSegment(point, doorStart, doorEnd)

@@ -308,25 +308,22 @@ export function convertStateToExportData(state: EditorState): ExportData {
         })
       })
       
-      // CRÉER LES RELATIONS ENTRE LES SALLES VIA LA PORTE
-      // Trouver les entity_id des deux salles connectées
+      // CRÉER UNE RELATION ENTRE LES SALLES VIA LA PORTE
+      // NOTE: Une seule relation suffit (pas besoin de bidirectionnelle)
+      // Le backend/pathfinding gère les deux sens automatiquement
       const roomAEntityId = door.room_a ? roomIdToEntityId.get(door.room_a) : null
       const roomBEntityId = door.room_b ? roomIdToEntityId.get(door.room_b) : null
       
       if (roomAEntityId && roomBEntityId) {
-        // Relation bidirectionnelle: Room A → Room B
-        relations.push({
-          relation_id: relationIdCounter++,
-          source_id: roomAEntityId,
-          cible_id: roomBEntityId,
-          type_relation: 'DOOR'
-        })
+        // Une seule relation: toujours du plus petit ID vers le plus grand pour éviter doublons
+        const [sourceId, cibleId] = roomAEntityId < roomBEntityId 
+          ? [roomAEntityId, roomBEntityId]
+          : [roomBEntityId, roomAEntityId]
         
-        // Relation bidirectionnelle: Room B → Room A
         relations.push({
           relation_id: relationIdCounter++,
-          source_id: roomBEntityId,
-          cible_id: roomAEntityId,
+          source_id: sourceId,
+          cible_id: cibleId,
           type_relation: 'DOOR'
         })
       }

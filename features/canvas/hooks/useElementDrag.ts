@@ -273,7 +273,27 @@ export function useElementDrag({
                 const linkId = key.substring(13)
                 const idx = newVerticalLinks.findIndex(v => v.id === linkId)
                 if (idx >= 0) {
-                  newVerticalLinks[idx] = translateVerticalLink(element, delta)
+                  const translatedLink = translateVerticalLink(element, delta)
+                  
+                  // Recalculer le roomId après déplacement avec la room
+                  const [width, height] = translatedLink.size || [80, 120]
+                  const corners = [
+                    { x: translatedLink.position.x, y: translatedLink.position.y },
+                    { x: translatedLink.position.x + width, y: translatedLink.position.y },
+                    { x: translatedLink.position.x + width, y: translatedLink.position.y + height },
+                    { x: translatedLink.position.x, y: translatedLink.position.y + height }
+                  ]
+                  
+                  // Trouver la room qui contient tous les coins
+                  const containingRoom = newRooms.find(r => 
+                    r.polygon.length >= 3 && 
+                    corners.every(corner => isPointInPolygon(corner, r.polygon))
+                  )
+                  
+                  newVerticalLinks[idx] = {
+                    ...translatedLink,
+                    roomId: containingRoom?.id || element.roomId // Garder l'ancien si pas trouvé
+                  }
                 }
               }
             })
@@ -319,7 +339,27 @@ export function useElementDrag({
           case 'verticalLink':
             const linkIndex = newVerticalLinks.findIndex(v => v.id === selected.id)
             if (linkIndex >= 0) {
-              newVerticalLinks[linkIndex] = translateVerticalLink(original, delta)
+              const translatedLink = translateVerticalLink(original, delta)
+              
+              // Recalculer le roomId en fonction de la nouvelle position
+              const [width, height] = translatedLink.size || [80, 120]
+              const corners = [
+                { x: translatedLink.position.x, y: translatedLink.position.y },
+                { x: translatedLink.position.x + width, y: translatedLink.position.y },
+                { x: translatedLink.position.x + width, y: translatedLink.position.y + height },
+                { x: translatedLink.position.x, y: translatedLink.position.y + height }
+              ]
+              
+              // Trouver la room qui contient tous les coins du vertical link
+              const newRoom = newRooms.find(r => 
+                r.polygon.length >= 3 && 
+                corners.every(corner => isPointInPolygon(corner, r.polygon))
+              )
+              
+              newVerticalLinks[linkIndex] = {
+                ...translatedLink,
+                roomId: newRoom?.id
+              }
             }
             break
         }
