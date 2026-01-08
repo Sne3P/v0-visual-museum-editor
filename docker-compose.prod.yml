@@ -228,6 +228,7 @@ services:
     ports:
       - "8080:80"
     volumes:
+      - uploads_data_prod:/usr/share/nginx/html/uploads:ro
       - audio_data_prod:/usr/share/nginx/html/uploads/audio:ro
     networks:
       - museum-network

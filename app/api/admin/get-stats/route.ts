@@ -10,20 +10,22 @@ export async function GET() {
       SELECT 
         (SELECT COUNT(*) FROM oeuvres) as total_oeuvres,
         (SELECT COUNT(*) FROM pregenerations) as total_pregenerations,
-        (SELECT COUNT(*) FROM chunk) as total_chunks,
         (SELECT COUNT(DISTINCT oeuvre_id) FROM pregenerations) as oeuvres_with_pregenerations,
-        -- Calculer le nombre de combinaisons attendues (produit cartésien des critères)
+        -- Calculer le nombre de combinaisons attendues dynamiquement
         (
-          SELECT 
-            COALESCE((
-              SELECT (
-                SELECT COUNT(*) FROM criterias WHERE type = 'age'
-              ) * (
-                SELECT COUNT(*) FROM criterias WHERE type = 'thematique'
-              ) * (
-                SELECT COUNT(*) FROM criterias WHERE type = 'style_texte'
-              )
-            ), 36)
+          SELECT COALESCE(
+            (
+              SELECT COUNT(*) 
+              FROM (
+                SELECT DISTINCT jsonb_object_keys(criteria_combination) 
+                FROM pregenerations 
+                LIMIT 1
+              ) types
+            ) * (
+              SELECT COUNT(*) FROM criterias
+            ) / NULLIF((SELECT COUNT(DISTINCT type) FROM criterias), 0),
+            0
+          )
         ) as expected_per_oeuvre
     `)
 
@@ -38,7 +40,6 @@ export async function GET() {
       stats: {
         total_oeuvres: parseInt(stats.total_oeuvres),
         total_pregenerations: parseInt(stats.total_pregenerations),
-        total_chunks: parseInt(stats.total_chunks),
         oeuvres_with_pregenerations: parseInt(stats.oeuvres_with_pregenerations),
         expected_pregenerations: expectedTotal,
         completion_rate: completionRate

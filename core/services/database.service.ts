@@ -188,7 +188,7 @@ export function convertStateToExportData(state: EditorState): ExportData {
         title: artwork.name || artwork.metadata?.title || 'Sans titre',
         artist: artwork.artist || artwork.metadata?.artist || 'Artiste inconnu',
         description: artwork.metadata?.description || '',
-        image_link: null,
+        image_link: artwork.image_link || null,
         pdf_path: finalPdfPath,
         pdf_link: finalPdfPath,  // Legacy compatibility
         file_name: fileName || null,

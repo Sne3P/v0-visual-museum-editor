@@ -26,6 +26,7 @@ export interface Artwork {
   readonly pdf_id?: string
   readonly pdfLink?: string  // Legacy - utiliser pdfPath
   readonly pdfPath?: string  // Nouveau - chemin du PDF uploadé
+  readonly image_link?: string  // NEW: Chemin de l'image de l'œuvre
   readonly tempPdfFile?: File | null
   readonly tempPdfBase64?: string | null
   readonly roomId?: string  // Pour liaison parent-enfant (cascade)

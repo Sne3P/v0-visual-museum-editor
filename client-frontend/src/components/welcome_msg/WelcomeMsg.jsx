@@ -7,7 +7,8 @@ const WelcomeMsg = () => {
   useEffect(() => {
     const fetchMuseumTitle = async () => {
       try {
-        const response = await fetch('/api/museum-settings?setting_key=museum_title');
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3000';
+        const response = await fetch(`${backendUrl}/api/museum-settings?setting_key=museum_title`);
         const data = await response.json();
         
         if (data && data.setting_value) {

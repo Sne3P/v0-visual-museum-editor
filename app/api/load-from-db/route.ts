@@ -116,6 +116,7 @@ export async function GET() {
             name: oeuvre?.title || entity.name || 'Sans titre',
             artist: oeuvre?.artist || 'Artiste inconnu',
             pdfPath: oeuvre?.file_path || oeuvre?.pdf_link || metadata.pdfPath || null,
+            image_link: oeuvre?.image_link || '/placeholder.svg',
             roomId: metadata.roomId,
             metadata: oeuvre ? {
               title: oeuvre.title,

@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getPostgresPool } from '@/lib/database-postgres'
 
+// Helper pour ajouter les headers CORS
+function addCORSHeaders(response: NextResponse) {
+  response.headers.set('Access-Control-Allow-Origin', '*')
+  response.headers.set('Access-Control-Allow-Methods', 'GET, PUT, POST, DELETE, OPTIONS')
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  return response
+}
+
+/**
+ * OPTIONS /api/museum-settings
+ * Gérer les preflight requests CORS
+ */
+export async function OPTIONS() {
+  const response = new NextResponse(null, { status: 204 })
+  return addCORSHeaders(response)
+}
+
 /**
  * GET /api/museum-settings
  * Récupère tous les paramètres du musée ou un paramètre spécifique
@@ -20,27 +37,27 @@ export async function GET(request: NextRequest) {
       )
 
       if (result.rows.length === 0) {
-        return NextResponse.json(
+        return addCORSHeaders(NextResponse.json(
           { error: 'Paramètre non trouvé' },
           { status: 404 }
-        )
+        ))
       }
 
-      return NextResponse.json(result.rows[0])
+      return addCORSHeaders(NextResponse.json(result.rows[0]))
     } else {
       // Récupérer tous les paramètres
       const result = await pool.query(
         'SELECT setting_id, setting_key, setting_value, description, category, updated_at FROM museum_settings ORDER BY category, setting_key'
       )
 
-      return NextResponse.json(result.rows)
+      return addCORSHeaders(NextResponse.json(result.rows))
     }
   } catch (error) {
     console.error('Erreur lors de la récupération des paramètres:', error)
-    return NextResponse.json(
+    return addCORSHeaders(NextResponse.json(
       { error: 'Erreur serveur lors de la récupération des paramètres' },
       { status: 500 }
-    )
+    ))
   }
 }
 
@@ -106,16 +123,16 @@ export async function PUT(request: NextRequest) {
       [jsonValue, setting_key]
     )
 
-    return NextResponse.json({
+    return addCORSHeaders(NextResponse.json({
       success: true,
       setting: result.rows[0]
-    })
+    }))
   } catch (error) {
     console.error('Erreur lors de la mise à jour du paramètre:', error)
-    return NextResponse.json(
+    return addCORSHeaders(NextResponse.json(
       { error: 'Erreur serveur lors de la mise à jour du paramètre' },
       { status: 500 }
-    )
+    ))
   }
 }
 
@@ -150,25 +167,25 @@ export async function POST(request: NextRequest) {
       [setting_key, jsonValue, description || null, category || 'general']
     )
 
-    return NextResponse.json({
+    return addCORSHeaders(NextResponse.json({
       success: true,
       setting: result.rows[0]
-    }, { status: 201 })
+    }, { status: 201 }))
   } catch (error: any) {
     console.error('Erreur lors de la création du paramètre:', error)
     
     // Gérer le cas de clé dupliquée
     if (error.code === '23505') {
-      return NextResponse.json(
+      return addCORSHeaders(NextResponse.json(
         { error: 'Ce paramètre existe déjà' },
         { status: 409 }
-      )
+      ))
     }
 
-    return NextResponse.json(
+    return addCORSHeaders(NextResponse.json(
       { error: 'Erreur serveur lors de la création du paramètre' },
       { status: 500 }
-    )
+    ))
   }
 }
 
@@ -182,10 +199,10 @@ export async function DELETE(request: NextRequest) {
     const settingKey = searchParams.get('setting_key')
 
     if (!settingKey) {
-      return NextResponse.json(
+      return addCORSHeaders(NextResponse.json(
         { error: 'Le paramètre setting_key est requis' },
         { status: 400 }
-      )
+      ))
     }
 
     const pool = await getPostgresPool()
@@ -196,21 +213,21 @@ export async function DELETE(request: NextRequest) {
     )
 
     if (result.rows.length === 0) {
-      return NextResponse.json(
+      return addCORSHeaders(NextResponse.json(
         { error: 'Paramètre non trouvé' },
         { status: 404 }
-      )
+      ))
     }
 
-    return NextResponse.json({
+    return addCORSHeaders(NextResponse.json({
       success: true,
       message: 'Paramètre supprimé avec succès'
-    })
+    }))
   } catch (error) {
     console.error('Erreur lors de la suppression du paramètre:', error)
-    return NextResponse.json(
+    return addCORSHeaders(NextResponse.json(
       { error: 'Erreur serveur lors de la suppression du paramètre' },
       { status: 500 }
-    )
+    ))
   }
 }

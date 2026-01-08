@@ -447,8 +447,6 @@ function CriteriaGroupCard({
   onDeleteCriteria: (id: number, label: string) => void
   onDeleteType: (type: string, label: string) => void
 }) {
-  const defaultImage = '/images/default-criteria.svg'
-
   return (
     <Card>
       <CardHeader className="bg-gray-50">
@@ -496,11 +494,11 @@ function CriteriaGroupCard({
                     <div className="flex-shrink-0">
                       <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
                         <img
-                          src={criteria.image_link || defaultImage}
+                          src={criteria.image_link || '/placeholder.svg'}
                           alt={criteria.label}
                           className="w-full h-full object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).src = defaultImage
+                          onError={(e: any) => {
+                            (e.target as HTMLImageElement).src = '/placeholder.svg'
                           }}
                         />
                       </div>
@@ -639,9 +637,10 @@ function CreateCriteriaModal({ type, onClose, onCreate }: {
   const [formData, setFormData] = useState({
     label: '',
     description: '',
-    image_link: '',
+    image_link: '/placeholder.svg',
     ai_indication: ''
   })
+  const [uploading, setUploading] = useState(false)
 
   const generateTechnicalName = (label: string): string => {
     return label
@@ -651,6 +650,44 @@ function CreateCriteriaModal({ type, onClose, onCreate }: {
       .replace(/[^a-z0-9\s]/g, '')
       .trim()
       .replace(/\s+/g, '_')
+  }
+
+  const handleImageChange = async (file: File | null) => {
+    if (!file) {
+      // Suppression de l'image
+      setFormData(prev => ({ ...prev, image_link: '/placeholder.svg' }))
+      return
+    }
+
+    setUploading(true)
+    try {
+      const uploadFormData = new FormData()
+      uploadFormData.append('criteriaId', `temp-${Date.now()}`)
+      uploadFormData.append('imageFile', file)
+      
+      if (formData.image_link && formData.image_link !== '/placeholder.svg') {
+        uploadFormData.append('oldImagePath', formData.image_link)
+      }
+
+      const uploadResponse = await fetch('/api/criteria-image', {
+        method: 'POST',
+        body: uploadFormData
+      })
+
+      const uploadResult = await uploadResponse.json()
+
+      if (!uploadResponse.ok) {
+        throw new Error(uploadResult.error || 'Erreur upload image')
+      }
+
+      setFormData(prev => ({ ...prev, image_link: uploadResult.imagePath }))
+      
+    } catch (error) {
+      console.error('❌ Erreur upload image:', error)
+      alert(`Erreur lors de l'upload de l'image: ${error instanceof Error ? error.message : 'Erreur inconnue'}`)
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -711,15 +748,67 @@ function CreateCriteriaModal({ type, onClose, onCreate }: {
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                 <ImageIcon className="h-4 w-4" />
-                URL de l'Image <span className="text-gray-400 text-xs">(optionnel)</span>
+                Image du Critère <span className="text-gray-400 text-xs">(optionnel)</span>
               </label>
+              
+              {/* Aperçu de l'image */}
+              {formData.image_link && (
+                <div className="mt-2 mb-3">
+                  <img 
+                    src={formData.image_link} 
+                    alt={formData.label || 'Aperçu'}
+                    className="w-full h-48 object-cover rounded-lg border border-gray-200"
+                  />
+                  {formData.image_link !== '/placeholder.svg' && (
+                    <div className="mt-2 flex gap-2">
+                      <label
+                        htmlFor="criteria-image-create"
+                        className="px-3 py-1 text-xs font-medium text-orange-700 bg-orange-50 rounded hover:bg-orange-100 transition-colors cursor-pointer"
+                      >
+                        Modifier l'image
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleImageChange(null)}
+                        className="px-3 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100 transition-colors"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <input
-                type="text"
-                value={formData.image_link}
-                onChange={(e) => setFormData({ ...formData, image_link: e.target.value })}
-                placeholder="https://example.com/image.jpg (optionnel)"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                id="criteria-image-create"
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleImageChange(e.target.files?.[0] || null)}
+                disabled={uploading}
+                className={`${formData.image_link && formData.image_link !== '/placeholder.svg' ? 'hidden' : 'mt-1 block w-full'} text-sm text-gray-500
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded file:border-0
+                  file:text-sm file:font-semibold
+                  file:bg-purple-50 file:text-purple-700
+                  hover:file:bg-purple-100
+                  disabled:opacity-50 disabled:cursor-not-allowed`}
               />
+              
+              {uploading && (
+                <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span className="text-sm text-blue-700 font-medium">Upload en cours...</span>
+                </div>
+              )}
+              
+              {(!formData.image_link || formData.image_link === '/placeholder.svg') && !uploading && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Image affichée dans l'application client. Sans image, un placeholder sera affiché.
+                </p>
+              )}
             </div>
 
             <div>
@@ -770,9 +859,48 @@ function EditCriteriaModal({ criteria, onClose, onSave }: {
   const [formData, setFormData] = useState({
     label: criteria.label,
     description: criteria.description || '',
-    image_link: criteria.image_link || '',
+    image_link: criteria.image_link || '/placeholder.svg',
     ai_indication: criteria.ai_indication || ''
   })
+  const [uploading, setUploading] = useState(false)
+
+  const handleImageChange = async (file: File | null) => {
+    if (!file) {
+      // Suppression de l'image
+      setFormData(prev => ({ ...prev, image_link: '/placeholder.svg' }))
+      return
+    }
+
+    setUploading(true)
+    try {
+      const uploadFormData = new FormData()
+      uploadFormData.append('criteriaId', criteria.criteria_id.toString())
+      uploadFormData.append('imageFile', file)
+      
+      if (formData.image_link && formData.image_link !== '/placeholder.svg') {
+        uploadFormData.append('oldImagePath', formData.image_link)
+      }
+
+      const uploadResponse = await fetch('/api/criteria-image', {
+        method: 'POST',
+        body: uploadFormData
+      })
+
+      const uploadResult = await uploadResponse.json()
+
+      if (!uploadResponse.ok) {
+        throw new Error(uploadResult.error || 'Erreur upload image')
+      }
+
+      setFormData(prev => ({ ...prev, image_link: uploadResult.imagePath }))
+      
+    } catch (error) {
+      console.error('❌ Erreur upload image:', error)
+      alert(`Erreur lors de l'upload de l'image: ${error instanceof Error ? error.message : 'Erreur inconnue'}`)
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -830,15 +958,67 @@ function EditCriteriaModal({ criteria, onClose, onSave }: {
             <div>
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                 <ImageIcon className="h-4 w-4" />
-                URL de l'Image <span className="text-gray-400 text-xs">(optionnel)</span>
+                Image du Critère <span className="text-gray-400 text-xs">(optionnel)</span>
               </label>
+              
+              {/* Aperçu de l'image */}
+              {formData.image_link && (
+                <div className="mt-2 mb-3">
+                  <img 
+                    src={formData.image_link} 
+                    alt={formData.label || 'Aperçu'}
+                    className="w-full h-48 object-cover rounded-lg border border-gray-200"
+                  />
+                  {formData.image_link !== '/placeholder.svg' && (
+                    <div className="mt-2 flex gap-2">
+                      <label
+                        htmlFor="criteria-image-edit"
+                        className="px-3 py-1 text-xs font-medium text-orange-700 bg-orange-50 rounded hover:bg-orange-100 transition-colors cursor-pointer"
+                      >
+                        Modifier l'image
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleImageChange(null)}
+                        className="px-3 py-1 text-xs font-medium text-red-700 bg-red-50 rounded hover:bg-red-100 transition-colors"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <input
-                type="text"
-                value={formData.image_link}
-                onChange={(e) => setFormData({ ...formData, image_link: e.target.value })}
-                placeholder="https://example.com/image.jpg (optionnel)"
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                id="criteria-image-edit"
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleImageChange(e.target.files?.[0] || null)}
+                disabled={uploading}
+                className={`${formData.image_link && formData.image_link !== '/placeholder.svg' ? 'hidden' : 'mt-1 block w-full'} text-sm text-gray-500
+                  file:mr-4 file:py-2 file:px-4
+                  file:rounded file:border-0
+                  file:text-sm file:font-semibold
+                  file:bg-purple-50 file:text-purple-700
+                  hover:file:bg-purple-100
+                  disabled:opacity-50 disabled:cursor-not-allowed`}
               />
+              
+              {uploading && (
+                <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded flex items-center gap-2">
+                  <svg className="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  <span className="text-sm text-blue-700 font-medium">Upload en cours...</span>
+                </div>
+              )}
+              
+              {(!formData.image_link || formData.image_link === '/placeholder.svg') && !uploading && (
+                <p className="mt-2 text-xs text-gray-500">
+                  Image affichée dans l'application client. Sans image, un placeholder sera affiché.
+                </p>
+              )}
             </div>
 
             <div>

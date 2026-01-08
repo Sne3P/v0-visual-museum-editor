@@ -17,11 +17,16 @@ const Accueil = () => {
   useEffect(() => {
     const fetchMuseumImage = async () => {
       try {
-        const response = await fetch('/api/museum-settings?setting_key=museum_image_url');
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3000';
+        const response = await fetch(`${backendUrl}/api/museum-settings?setting_key=museum_image_url`);
         const data = await response.json();
         
         if (data && data.setting_value) {
-          setMuseumImageUrl(data.setting_value);
+          // Si l'URL est relative, ajouter le backendUrl
+          const imageUrl = data.setting_value.startsWith('http') 
+            ? data.setting_value 
+            : `${backendUrl}${data.setting_value}`;
+          setMuseumImageUrl(imageUrl);
         }
       } catch (error) {
         console.error('Erreur chargement image musée:', error);
