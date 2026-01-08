@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/auth-context'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
   ArrowLeft, Plus, Pencil, Trash2, X, Save, 
-  FolderPlus, ListTree, Hash, ImageIcon 
+  FolderPlus, ListTree, Hash, ImageIcon, AlertCircle, CheckCircle
 } from 'lucide-react'
 
 // ===== TYPES =====
@@ -310,88 +312,100 @@ export default function ProfilsPage() {
   if (authLoading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">
-            {authLoading ? 'Vérification des permissions...' : 'Chargement des profils...'}
-          </p>
-        </div>
+        <Card className="w-auto">
+          <CardContent className="pt-6 text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">
+              {authLoading ? 'Vérification des permissions...' : 'Chargement des critères...'}
+            </p>
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   // ===== RENDER MAIN =====
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-6">
-      {/* Header */}
-      <div className="max-w-7xl mx-auto mb-6">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => router.push('/admin')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <ArrowLeft className="h-5 w-5" />
-              </button>
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900">Gestion des Profils</h1>
-                <p className="text-gray-600">Critères Types et Critères Individuels</p>
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => router.push('/admin')}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div>
+                  <CardTitle className="text-2xl">Gestion des Critères</CardTitle>
+                  <CardDescription>Configurez les types de critères et leurs options</CardDescription>
+                </div>
               </div>
+              <Button onClick={() => setModal({ type: 'create-type' })}>
+                <FolderPlus className="h-4 w-4 mr-2" />
+                Nouveau Type
+              </Button>
             </div>
-            <button
-              onClick={() => setModal({ type: 'create-type' })}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2"
-            >
-              <FolderPlus className="h-5 w-5" />
-              Nouveau Type
-            </button>
-          </div>
+          </CardHeader>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-4 mt-6">
-            <div className="bg-blue-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-blue-600">{stats.totalTypes}</p>
-              <p className="text-sm text-gray-600 mt-1">Types de Critères</p>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-4">
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <p className="text-3xl font-bold text-blue-600">{stats.totalTypes}</p>
+                  <p className="text-sm text-gray-600 mt-1">Types de Critères</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <p className="text-3xl font-bold text-purple-600">{stats.totalCriterias}</p>
+                  <p className="text-sm text-gray-600 mt-1">Critères Totaux</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <p className="text-3xl font-bold text-green-600">{stats.totalCombinations.toLocaleString()}</p>
+                  <p className="text-sm text-gray-600 mt-1">Combinaisons Possibles</p>
+                </CardContent>
+              </Card>
             </div>
-            <div className="bg-purple-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-purple-600">{stats.totalCriterias}</p>
-              <p className="text-sm text-gray-600 mt-1">Critères Totaux</p>
-            </div>
-            <div className="bg-green-50 rounded-lg p-4 text-center">
-              <p className="text-3xl font-bold text-green-600">{stats.totalCombinations.toLocaleString()}</p>
-              <p className="text-sm text-gray-600 mt-1">Combinaisons Possibles</p>
-            </div>
-          </div>
-        </div>
-      </div>
+          </CardContent>
+        </Card>
 
-      {/* Criteria Groups */}
-      <div className="max-w-7xl mx-auto space-y-4 max-h-[calc(100vh-300px)] overflow-y-auto pr-2">
-        {groups.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-md p-12 text-center">
-            <ListTree className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">Aucun critère défini</p>
-            <p className="text-sm text-gray-500 mt-2">Commencez par créer un type de critère</p>
-          </div>
-        ) : (
-          groups.map(group => (
-            <CriteriaGroupCard
-              key={group.type_info.type}
-              group={group}
-              onAddCriteria={() => setModal({ 
-                type: 'create-criteria', 
-                data: { type: group.type_info.type } 
-              })}
-              onEditCriteria={(criteria) => setModal({ 
-                type: 'edit-criteria', 
-                data: criteria 
-              })}
-              onDeleteCriteria={handleDeleteCriteria}
-              onDeleteType={handleDeleteType}
-            />
-          ))
-        )}
+        {/* Criteria Groups */}
+        <div className="space-y-4 max-h-[calc(100vh-350px)] overflow-y-auto pr-2">
+          {groups.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <ListTree className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                <CardTitle className="text-gray-600 mb-2">Aucun critère défini</CardTitle>
+                <CardDescription>Commencez par créer un type de critère</CardDescription>
+              </CardContent>
+            </Card>
+          ) : (
+            groups.map(group => (
+              <CriteriaGroupCard
+                key={group.type_info.type}
+                group={group}
+                onAddCriteria={() => setModal({ 
+                  type: 'create-criteria', 
+                  data: { type: group.type_info.type } 
+                })}
+                onEditCriteria={(criteria) => setModal({ 
+                  type: 'edit-criteria', 
+                  data: criteria 
+                })}
+                onDeleteCriteria={handleDeleteCriteria}
+                onDeleteType={handleDeleteType}
+              />
+            ))
+          )}
+        </div>
       </div>
 
       {/* Modals */}
@@ -436,94 +450,100 @@ function CriteriaGroupCard({
   const defaultImage = '/images/default-criteria.svg'
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      {/* Type Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-4">
+    <Card>
+      <CardHeader className="bg-gray-50">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-bold">{group.type_info.label}</h2>
-            <p className="text-sm opacity-90">
+            <CardTitle>{group.type_info.label}</CardTitle>
+            <CardDescription>
               {group.criterias.length} critère(s)
-            </p>
+            </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <Button
               onClick={onAddCriteria}
-              className="px-3 py-1.5 bg-white text-blue-600 rounded hover:bg-blue-50 flex items-center gap-1 text-sm font-medium"
+              size="sm"
+              variant="outline"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-4 w-4 mr-2" />
               Ajouter
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => onDeleteType(group.type_info.type, group.type_info.label)}
-              className="p-1.5 bg-red-500 text-white rounded hover:bg-red-600"
+              size="sm"
+              variant="destructive"
               title="Supprimer le type"
             >
               <Trash2 className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
         </div>
-      </div>
+      </CardHeader>
 
-      {/* Criterias List */}
-      <div className="p-4">
+      <CardContent className="pt-6">
         {group.criterias.length === 0 ? (
           <p className="text-center text-gray-400 py-8 italic">Aucun critère dans ce type</p>
         ) : (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
             {group.criterias.map(criteria => (
-              <div
+              <Card
                 key={criteria.criteria_id}
-                className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow bg-gray-50"
+                className="hover:shadow-md transition-shadow"
               >
-                <div className="flex items-start gap-3">
-                  {/* Image */}
-                  <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-200 border border-gray-300">
-                      <img
-                        src={criteria.image_link || defaultImage}
-                        alt={criteria.label}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          (e.target as HTMLImageElement).src = defaultImage
-                        }}
-                      />
+                <CardContent className="p-3">
+                  <div className="flex items-start gap-3">
+                    {/* Image */}
+                    <div className="flex-shrink-0">
+                      <div className="w-12 h-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                        <img
+                          src={criteria.image_link || defaultImage}
+                          alt={criteria.label}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = defaultImage
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-grow min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">{criteria.label}</h3>
+                      {criteria.description && (
+                        <p className="text-sm text-gray-600 mt-1 line-clamp-2">{criteria.description}</p>
+                      )}
+                      {criteria.ai_indication && (
+                        <div className="mt-2 bg-purple-50 border border-purple-200 rounded p-2">
+                          <p className="text-xs text-purple-700 font-medium">IA:</p>
+                          <p className="text-xs text-purple-900 line-clamp-2">{criteria.ai_indication}</p>
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div className="flex gap-1 mt-2">
+                        <Button
+                          onClick={() => onEditCriteria(criteria)}
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2"
+                          title="Modifier"
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          onClick={() => onDeleteCriteria(criteria.criteria_id, criteria.label)}
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-
-                  {/* Content */}
-                  <div className="flex-grow min-w-0">
-                    <h3 className="font-semibold text-gray-900 truncate">{criteria.label}</h3>
-                    {criteria.description && (
-                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{criteria.description}</p>
-                    )}
-                    {criteria.ai_indication && (
-                      <div className="mt-2 bg-purple-50 border border-purple-200 rounded p-2">
-                        <p className="text-xs text-purple-700 font-medium">IA:</p>
-                        <p className="text-xs text-purple-900 line-clamp-2">{criteria.ai_indication}</p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={() => onEditCriteria(criteria)}
-                      className="p-1.5 bg-blue-100 text-blue-600 rounded hover:bg-blue-200"
-                      title="Modifier"
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={() => onDeleteCriteria(criteria.criteria_id, criteria.label)}
-                      className="p-1.5 bg-red-100 text-red-600 rounded hover:bg-red-200"
-                      title="Supprimer"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}
@@ -560,48 +580,53 @@ function CreateTypeModal({ onClose, onCreate }: {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-bold">Nouveau Type de Critère</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nom du Type <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="ex: Âge, Thématique, Accessibilité"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoFocus
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              L'identifiant technique sera généré automatiquement
-            </p>
+      <Card className="max-w-md w-full">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle>Nouveau Type de Critère</CardTitle>
+            <Button onClick={onClose} variant="ghost" size="icon" className="h-8 w-8">
+              <X className="h-4 w-4" />
+            </Button>
           </div>
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
-            >
-              <Save className="h-4 w-4" />
-              Créer
-            </button>
-          </div>
+        </CardHeader>
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nom du Type <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="ex: Âge, Thématique, Accessibilité"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                L'identifiant technique sera généré automatiquement
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                onClick={onClose}
+                variant="outline"
+                className="flex-1"
+              >
+                Annuler
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Créer
+              </Button>
+            </div>
+          </CardContent>
         </form>
-      </div>
+      </Card>
     </div>
   )
 }
@@ -639,95 +664,100 @@ function CreateCriteriaModal({ type, onClose, onCreate }: {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full my-8">
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-bold">Nouveau Critère</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded p-3">
-            <p className="text-sm text-blue-900">
-              Type : <strong>{type}</strong>
-            </p>
+      <Card className="max-w-2xl w-full my-8">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle>Nouveau Critère</CardTitle>
+            <Button onClick={onClose} variant="ghost" size="icon" className="h-8 w-8">
+              <X className="h-4 w-4" />
+            </Button>
           </div>
+        </CardHeader>
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded p-3">
+              <p className="text-sm text-blue-900">
+                Type : <strong>{type}</strong>
+              </p>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nom <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.label}
-              onChange={(e) => setFormData({ ...formData, label: e.target.value })}
-              placeholder="ex: Enfant, Adulte, Senior"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoFocus
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nom <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.label}
+                onChange={(e) => setFormData({ ...formData, label: e.target.value })}
+                placeholder="ex: Enfant, Adulte, Senior"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Description du critère..."
-              rows={3}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Description du critère..."
+                rows={3}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
 
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-              <ImageIcon className="h-4 w-4" />
-              URL de l'Image <span className="text-gray-400 text-xs">(optionnel)</span>
-            </label>
-            <input
-              type="text"
-              value={formData.image_link}
-              onChange={(e) => setFormData({ ...formData, image_link: e.target.value })}
-              placeholder="https://example.com/image.jpg (optionnel)"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                <ImageIcon className="h-4 w-4" />
+                URL de l'Image <span className="text-gray-400 text-xs">(optionnel)</span>
+              </label>
+              <input
+                type="text"
+                value={formData.image_link}
+                onChange={(e) => setFormData({ ...formData, image_link: e.target.value })}
+                placeholder="https://example.com/image.jpg (optionnel)"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Indication pour l'IA (optionnel)
-            </label>
-            <textarea
-              value={formData.ai_indication}
-              onChange={(e) => setFormData({ ...formData, ai_indication: e.target.value })}
-              placeholder="Instructions pour guider la génération de contenu..."
-              rows={3}
-              className="w-full p-3 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-purple-50"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Laissez vide si le nom et la description suffisent pour le prompt IA
-            </p>
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Indication pour l'IA (optionnel)
+              </label>
+              <textarea
+                value={formData.ai_indication}
+                onChange={(e) => setFormData({ ...formData, ai_indication: e.target.value })}
+                placeholder="Instructions pour guider la génération de contenu..."
+                rows={3}
+                className="w-full p-3 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-purple-50"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Laissez vide si le nom et la description suffisent pour le prompt IA
+              </p>
+            </div>
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
-            >
-              <Save className="h-4 w-4" />
-              Créer
-            </button>
-          </div>
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                onClick={onClose}
+                variant="outline"
+                className="flex-1"
+              >
+                Annuler
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Créer
+              </Button>
+            </div>
+          </CardContent>
         </form>
-      </div>
+      </Card>
     </div>
   )
 }
@@ -755,88 +785,97 @@ function EditCriteriaModal({ criteria, onClose, onSave }: {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full my-8">
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-bold">Modifier le Critère</h2>
-          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded p-3">
-            <p className="text-sm text-blue-900">
-              Type : <strong>{criteria.type.charAt(0).toUpperCase() + criteria.type.slice(1).replace(/_/g, ' ')}</strong>
-            </p>
+      <Card className="max-w-2xl w-full my-8">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle>Modifier le Critère</CardTitle>
+            <Button onClick={onClose} variant="ghost" size="icon" className="h-8 w-8">
+              <X className="h-4 w-4" />
+            </Button>
           </div>
+        </CardHeader>
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded p-3">
+              <p className="text-sm text-blue-900">
+                Type : <strong>{criteria.type.charAt(0).toUpperCase() + criteria.type.slice(1).replace(/_/g, ' ')}</strong>
+              </p>
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Nom <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.label}
-              onChange={(e) => setFormData({ ...formData, label: e.target.value })}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              autoFocus
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nom <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.label}
+                onChange={(e) => setFormData({ ...formData, label: e.target.value })}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description
-            </label>
-            <textarea
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              rows={3}
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
 
-          <div>
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-              <ImageIcon className="h-4 w-4" />
-              URL de l'Image <span className="text-gray-400 text-xs">(optionnel)</span>
-            </label>
-            <input
-              type="text"
-              value={formData.image_link}
-              onChange={(e) => setFormData({ ...formData, image_link: e.target.value })}
-              placeholder="https://example.com/image.jpg (optionnel)"
-              className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+            <div>
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                <ImageIcon className="h-4 w-4" />
+                URL de l'Image <span className="text-gray-400 text-xs">(optionnel)</span>
+              </label>
+              <input
+                type="text"
+                value={formData.image_link}
+                onChange={(e) => setFormData({ ...formData, image_link: e.target.value })}
+                placeholder="https://example.com/image.jpg (optionnel)"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Instruction pour l'IA <span className="text-gray-400 text-xs">(optionnel)</span>
-            </label>
-            <textarea
-              value={formData.ai_indication}
-              onChange={(e) => setFormData({ ...formData, ai_indication: e.target.value })}
-              rows={3}
-              className="w-full p-3 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-purple-50"
-            />
-          </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Instruction pour l'IA <span className="text-gray-400 text-xs">(optionnel)</span>
+              </label>
+              <textarea
+                value={formData.ai_indication}
+                onChange={(e) => setFormData({ ...formData, ai_indication: e.target.value })}
+                rows={3}
+                className="w-full p-3 border border-purple-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none bg-purple-50"
+              />
+            </div>
 
-          <div className="flex gap-3 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              Annuler
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center gap-2"
-            >
-              <Save className="h-4 w-4" />
-              Enregistrer
-            </button>
-          </div>
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                onClick={onClose}
+                variant="outline"
+                className="flex-1"
+              >
+                Annuler
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                Enregistrer
+              </Button>
+            </div>
+          </CardContent>
         </form>
+      </Card>
+    </div>
+  )
+}
       </div>
     </div>
   )

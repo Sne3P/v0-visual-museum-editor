@@ -139,10 +139,6 @@ class ArtworkSelector:
         """Charge les œuvres avec narrations selon profil"""
         cur = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # DEBUG: Logger le profil utilisé
-        profile_json = json.dumps(profile)
-        print(f"🔍 [SELECTOR DEBUG] Chargement artworks avec profile: {profile_json}")
-        
         # Query avec narrations pregenerées
         cur.execute("""
             SELECT DISTINCT
@@ -152,7 +148,6 @@ class ArtworkSelector:
                 o.date_oeuvre,
                 o.materiaux_technique,
                 p.pregeneration_text as narration,
-                p.criteria_combination as criteria_used,
                 LENGTH(p.pregeneration_text) as narration_length,
                 e_art.entity_id as artwork_entity_id,
                 (SELECT AVG(pts.x) FROM points pts WHERE pts.entity_id = e_art.entity_id) as artwork_x,
@@ -165,21 +160,11 @@ class ArtworkSelector:
               AND p.criteria_combination @> %(profile)s::jsonb
             ORDER BY o.oeuvre_id
         """, {
-            'profile': profile_json
+            'profile': json.dumps(profile)
         })
         
         artworks = []
-        rows = cur.fetchall()
-        print(f"📊 [SELECTOR DEBUG] Trouvé {len(rows)} œuvres candidates")
-        
-        for row in rows:
-            # DEBUG: Logger les premières narrations
-            narration_preview = row['narration'][:100] if row['narration'] else 'VIDE'
-            print(f"📝 [SELECTOR DEBUG] Oeuvre {row['oeuvre_id']}: {narration_preview}...")
-            print(f"🔑 [SELECTOR DEBUG] Critères utilisés: {row['criteria_used']}")
-            if "lorem" in row['narration'].lower():
-                print(f"❌ [SELECTOR DEBUG] LOREM IPSUM DETECTE dans oeuvre {row['oeuvre_id']}!")
-            
+        for row in cur.fetchall():
             # Déterminer étage depuis plan_id
             plan_id = row['plan_id']
             floor = self._get_floor_from_plan(plan_id)

@@ -182,14 +182,6 @@ class PiperTTSService:
                 logger.warning(f"⚠️ Pas de texte pour oeuvre {oeuvre_id}")
                 continue
             
-            # DEBUG: Logger le texte COMPLET pour vérifier
-            logger.info(f"🔍 [TTS DEBUG] Génération audio: oeuvre_{oeuvre_id}")
-            logger.info(f"📝 [TTS DEBUG] Texte (100 premiers caractères): {text[:100]}")
-            logger.info(f"📏 [TTS DEBUG] Longueur totale: {len(text)} caractères")
-            if "lorem" in text.lower() or "ipsum" in text.lower():
-                logger.error(f"❌ [TTS DEBUG] LOREM IPSUM DETECTE dans oeuvre_{oeuvre_id}!")
-                logger.error(f"❌ [TTS DEBUG] Texte complet: {text[:500]}...")
-            
             # Générer le nom de fichier
             filename = f"oeuvre_{oeuvre_id}"
             
