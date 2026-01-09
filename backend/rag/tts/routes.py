@@ -47,17 +47,18 @@ def generate_single_audio():
         piper = get_piper_service(language)
         
         # Générer l'audio
-        audio_path = piper.generate_audio(
+        audio_result = piper.generate_audio(
             text=text,
             output_filename=filename,
             parcours_id=parcours_id,
             language=language
         )
         
-        if audio_path:
+        if audio_result:
             return jsonify({
                 'success': True,
-                'audio_path': audio_path,
+                'audio_path': audio_result['path'],
+                'duration_seconds': audio_result['duration_seconds'],
                 'filename': f"{filename}.wav"
             }), 200
         else:
@@ -109,7 +110,7 @@ def generate_parcours_audio():
         piper = get_piper_service(language)
         
         # Générer tous les audios
-        audio_paths = piper.generate_parcours_audio(
+        audio_results = piper.generate_parcours_audio(
             parcours_id=parcours_id,
             narrations=narrations,
             language=language
@@ -118,8 +119,9 @@ def generate_parcours_audio():
         return jsonify({
             'success': True,
             'parcours_id': parcours_id,
-            'audio_count': len(audio_paths),
-            'audio_paths': audio_paths
+            'audio_count': len(audio_results),
+            'audio_paths': {oeuvre_id: data['path'] for oeuvre_id, data in audio_results.items()},
+            'audio_durations': {oeuvre_id: data['duration_seconds'] for oeuvre_id, data in audio_results.items()}
         }), 200
         
     except Exception as e:

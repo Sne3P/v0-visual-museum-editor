@@ -1327,22 +1327,69 @@ def generate_intelligent_parcours():
                 
                 # Générer les audios
                 piper = get_piper_service('fr_FR')
-                audio_paths = piper.generate_parcours_audio(
+                audio_results = piper.generate_parcours_audio(
                     parcours_id=parcours_id,
                     narrations=narrations,
                     language='fr_FR'
                 )
                 
-                # Intégrer les chemins audio dans les artworks
+                # Intégrer les chemins audio ET durées réelles dans les artworks
                 for artwork in parcours_json.get('artworks', []):
                     oeuvre_id = artwork['oeuvre_id']
-                    if oeuvre_id in audio_paths:
-                        artwork['audio_path'] = audio_paths[oeuvre_id]
+                    if oeuvre_id in audio_results:
+                        audio_data = audio_results[oeuvre_id]
+                        artwork['audio_path'] = audio_data['path']
+                        # Mettre à jour avec la durée réelle du fichier audio
+                        artwork['narration_duration'] = audio_data['duration_seconds']
+                
+                print(f"\n📊 CALCUL DES DURÉES AVEC AUDIO RÉEL:")
+                print(f"   Nombre d'œuvres: {len(parcours_json['artworks'])}")
+                
+                # Recalculer UNIQUEMENT la durée de narration avec les durées réelles d'audio
+                # Les durées de marche et observation restent identiques
+                total_narration_seconds = sum(artwork.get('narration_duration', 0) for artwork in parcours_json['artworks'])
+                total_narration_minutes = total_narration_seconds / 60
+                
+                # Récupérer les valeurs existantes de marche et observation (inchangées)
+                existing_walk_minutes = parcours_json['metadata']['duration_breakdown']['walking_minutes']
+                existing_observation_minutes = parcours_json['metadata']['duration_breakdown']['observation_minutes']
+                
+                print(f"\n   🎤 Narration (audio réel):")
+                print(f"      Total: {total_narration_seconds:.1f}s = {total_narration_minutes:.2f} min")
+                for artwork in parcours_json['artworks']:
+                    print(f"      - Œuvre {artwork['order']}: {artwork.get('narration_duration', 0):.1f}s")
+                
+                print(f"\n   🚶 Marche (0.8 m/s):")
+                print(f"      Total: {existing_walk_minutes:.2f} min")
+                for artwork in parcours_json['artworks']:
+                    walk = artwork.get('distance_to_next', 0)
+                    if walk > 0:
+                        print(f"      - Œuvre {artwork['order']} → suivante: {walk:.2f} min")
+                
+                print(f"\n   👁️ Observation (2 min/œuvre):")
+                print(f"      Total: {existing_observation_minutes:.2f} min")
+                
+                # Mettre à jour UNIQUEMENT narration_minutes et total_minutes
+                parcours_json['metadata']['duration_breakdown']['narration_minutes'] = total_narration_minutes
+                parcours_json['metadata']['duration_breakdown']['total_minutes'] = (
+                    total_narration_minutes + existing_walk_minutes + existing_observation_minutes
+                )
+                
+                print(f"\n   ⏱️ DURÉE TOTALE:")
+                print(f"      {total_narration_minutes:.2f} min (narration)")
+                print(f"    + {existing_walk_minutes:.2f} min (marche)")
+                print(f"    + {existing_observation_minutes:.2f} min (observation)")
+                print(f"    = {parcours_json['metadata']['duration_breakdown']['total_minutes']:.2f} min TOTAL")
+                print(f"    = {parcours_json['metadata']['duration_breakdown']['total_minutes']/60:.1f}h\n")
+                
+                # Mettre à jour aussi le champ racine estimated_duration_min (alias pour compatibilité)
+                parcours_json['estimated_duration_min'] = parcours_json['metadata']['duration_breakdown']['total_minutes']
                 
                 audio_result = {
                     'generated': True,
-                    'count': len(audio_paths),
-                    'paths': audio_paths
+                    'count': len(audio_results),
+                    'paths': {oeuvre_id: data['path'] for oeuvre_id, data in audio_results.items()},
+                    'durations': {oeuvre_id: data['duration_seconds'] for oeuvre_id, data in audio_results.items()}
                 }
                 
             except Exception as audio_error:

@@ -63,11 +63,19 @@ const Resume = () => {
     const currentArtwork = parcours.artworks[currentIndex];
     const metadata = parcours.metadata;
 
-    // Calculer le temps total du parcours (somme de tous les distance_to_next)
-    const totalMinutes = parcours.artworks.reduce((sum, artwork) => sum + (artwork.distance_to_next || 0), 0);
+    // Utiliser le temps total déjà calculé par le backend (avec les durées audio réelles)
+    const totalMinutes = metadata.duration_breakdown.total_minutes;
     
-    // Calculer le temps déjà effectué (somme des distance_to_next des œuvres déjà visitées)
-    const elapsedMinutes = parcours.artworks.slice(0, currentIndex).reduce((sum, artwork) => sum + (artwork.distance_to_next || 0), 0);
+    // Calculer le temps déjà effectué (œuvres VISITÉES = avant l'œuvre actuelle)
+    // À l'œuvre 1 (index 0): elapsedMinutes = 0 → temps restant = total
+    // À l'œuvre 2 (index 1): elapsedMinutes = durée_oeuvre_1 → temps restant = total - durée_oeuvre_1
+    // À la dernière œuvre: temps restant = durée de cette œuvre uniquement
+    const elapsedMinutes = parcours.artworks.slice(0, currentIndex).reduce((sum, artwork) => {
+        const narrationMinutes = (artwork.narration_duration || 0) / 60; // narration_duration est en secondes
+        const observationMinutes = 2; // 2 minutes par œuvre
+        const walkMinutes = artwork.distance_to_next || 0; // distance_to_next est déjà en minutes
+        return sum + narrationMinutes + observationMinutes + walkMinutes;
+    }, 0);
     
     // Temps restant = temps total - temps écoulé
     const remainingMinutes = Math.max(0, totalMinutes - elapsedMinutes);

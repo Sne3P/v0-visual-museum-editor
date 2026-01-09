@@ -192,25 +192,26 @@ class PathOptimizer:
         Estime durée totale du parcours (minutes)
         
         Formule: narrations + observations + déplacements
+        Vitesse de marche: 0.8 m/s (vitesse confortable en musée)
         """
         if not artworks:
             return 0.0
         
-        # Temps narrations
+        # Temps narrations (en secondes)
         narration_time = sum(a.narration_duration for a in artworks)
         
-        # Temps observation (2 min par œuvre)
+        # Temps observation (2 min = 120 secondes par œuvre)
         observation_time = len(artworks) * 120
         
-        # Temps déplacement (vitesse: 1.4 m/s)
+        # Temps déplacement (vitesse: 0.8 m/s - vitesse confortable en musée)
         total_distance = self.calculate_total_distance(artworks)
-        walking_time = total_distance / 1.4
+        walking_time = total_distance / 0.8
         
         total_seconds = narration_time + observation_time + walking_time
         
-        return total_seconds / 60  # Minutes
+        return total_seconds / 60  # Conversion en minutes
     
     def estimate_walk_time(self, artworks: List[Artwork]) -> float:
         """Estime temps de marche uniquement (minutes)"""
         total_distance = self.calculate_total_distance(artworks)
-        return (total_distance / 1.4) / 60  # m/s → minutes
+        return (total_distance / 0.8) / 60  # 0.8 m/s → minutes

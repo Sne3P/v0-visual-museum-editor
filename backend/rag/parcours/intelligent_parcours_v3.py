@@ -122,12 +122,24 @@ def generate_parcours_v3(
         total_distance = path_optimizer.calculate_total_distance(optimized_artworks)
         estimated_duration = path_optimizer.estimate_duration(optimized_artworks)
         
+        # Décomposition des temps (pour metadata.duration_breakdown)
+        walk_time = path_optimizer.estimate_walk_time(optimized_artworks)
+        narration_time_seconds = sum(a.narration_duration for a in optimized_artworks)
+        narration_time_min = narration_time_seconds / 60
+        observation_time = len(optimized_artworks) * 2.0  # 2 minutes par œuvre
+        
         floors_visited = sorted(set(a.position.floor for a in optimized_artworks))
         
         print(f"\n✅ PARCOURS GÉNÉRÉ:")
-        print(f"   Distance: {total_distance:.1f}m")
-        print(f"   Durée estimée: {estimated_duration:.1f} min")
+        print(f"   Œuvres: {len(optimized_artworks)}")
+        print(f"   Distance totale: {total_distance:.1f}m")
         print(f"   Étages: {floors_visited}")
+        
+        print(f"\n📊 DURÉE ESTIMÉE (avant génération audio):")
+        print(f"   🎤 Narration (estimation WPM): {narration_time_min:.2f} min ({narration_time_seconds:.1f}s)")
+        print(f"   🚶 Marche (0.8 m/s): {walk_time:.2f} min")
+        print(f"   👁️ Observation (2 min/œuvre): {observation_time:.2f} min")
+        print(f"   ⏱️ TOTAL: {estimated_duration:.2f} min ({estimated_duration/60:.1f}h)")
         
         # Charger les noms d'étages depuis plans
         floor_names = {}
@@ -138,13 +150,7 @@ def generate_parcours_v3(
         cur.close()
         
         # 9. Construire résultat (format compatible V2)
-        # Calcul breakdown durée
-        walk_time = path_optimizer.estimate_walk_time(optimized_artworks)
-        narration_time = sum(a.narration_duration for a in optimized_artworks)
-        observation_time = len(optimized_artworks) * 2.0  # 2 minutes par œuvre
-        
-        # Total en minutes
-        narration_time_min = narration_time / 60
+        # Les temps sont déjà calculés ci-dessus (walk_time, narration_time_min, observation_time)
         
         # Comptage
         rooms_visited = len(set(a.position.room for a in optimized_artworks))
@@ -170,7 +176,7 @@ def generate_parcours_v3(
                 'narration': a.narration,
                 'narration_word_count': int(a.narration_duration / 0.5),
                 'narration_duration': a.narration_duration,
-                'distance_to_next': distance_to_next / 1.4 / 60,  # mètres → minutes (vitesse 1.4 m/s)
+                'distance_to_next': distance_to_next / 0.8 / 60,  # mètres → minutes (vitesse 0.8 m/s)
                 'image_url': getattr(a, 'image_link', '') or '/placeholder.svg',
                 'position': {
                     'x': a.position.x,

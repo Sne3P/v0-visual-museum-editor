@@ -189,10 +189,12 @@ const MapViewer = ({ parcours, currentIndex }) => {
         currentSegmentIndexes.push(currentIndex);
     }
     
-    // Nom de l'étage pour l'affichage
-    const floorName = currentFloor === 0 ? 'RDC' : 
-                      currentFloor > 0 ? `Étage ${currentFloor}` : 
-                      `Sous-sol ${Math.abs(currentFloor)}`;
+    // Nom de l'étage pour l'affichage (utiliser floor_name du parcours)
+    const currentFloorArtwork = parcours.artworks.find(a => a.position.floor === currentFloor);
+    const floorName = currentFloorArtwork?.position?.floor_name || 
+                      (currentFloor === 0 ? 'RDC' : 
+                       currentFloor > 0 ? `Étage ${currentFloor}` : 
+                       `Sous-sol ${Math.abs(currentFloor)}`);
 
     return (
         <div className="map-viewer-container">
@@ -208,9 +210,12 @@ const MapViewer = ({ parcours, currentIndex }) => {
             {hasMultipleFloors && (
                 <div className="floor-selector">
                     {floors.map(floor => {
-                        const floorLabel = floor === 0 ? 'RDC' : 
-                                         floor > 0 ? `Étage ${floor}` : 
-                                         `SS ${Math.abs(floor)}`;
+                        // Chercher le nom de l'étage depuis le parcours (floor_name)
+                        const artwork = parcours.artworks.find(a => a.position.floor === floor);
+                        const floorLabel = artwork?.position?.floor_name || 
+                                         (floor === 0 ? 'RDC' : 
+                                          floor > 0 ? `Étage ${floor}` : 
+                                          `SS ${Math.abs(floor)}`);
                         return (
                             <button
                                 key={floor}
@@ -261,22 +266,12 @@ const MapViewer = ({ parcours, currentIndex }) => {
                     </g>
                 ))}
 
-                {/* Dessiner TOUS les segments du parcours */}
+                {/* Dessiner UNIQUEMENT le segment actuel (prochain chemin en BLEU) */}
                 {segmentsOnFloor.map((segment, idx) => {
-                    // Déterminer la couleur selon si c'est le prochain segment
+                    // Afficher uniquement le segment actuel en bleu
                     const isCurrentSegment = currentSegmentIndexes.includes(segment.segment_index);
-                    const isPastSegment = segment.segment_index < currentIndex;
                     
-                    let strokeColor = '#ccc'; // Gris clair par défaut (à venir)
-                    let strokeOpacity = 0.5;
-                    
-                    if (isCurrentSegment) {
-                        strokeColor = '#5dace2'; // Bleu pour le prochain segment
-                        strokeOpacity = 1;
-                    } else if (isPastSegment) {
-                        strokeColor = '#888'; // Gris foncé pour les segments déjà visités
-                        strokeOpacity = 0.6;
-                    }
+                    if (!isCurrentSegment) return null; // Ignorer les autres segments
                     
                     return (
                         <line
@@ -285,14 +280,14 @@ const MapViewer = ({ parcours, currentIndex }) => {
                             y1={segment.from.y}
                             x2={segment.to.x}
                             y2={segment.to.y}
-                            stroke={strokeColor}
-                            strokeWidth={isCurrentSegment ? "4" : "2"}
-                            opacity={strokeOpacity}
+                            stroke="#5dace2"
+                            strokeWidth="4"
+                            opacity={1}
                         />
                     );
                 })}
 
-                {/* Dessiner les waypoints (points verts sur TOUS les segments) */}
+                {/* Dessiner les waypoints (points verts AGRANDIS) */}
                 {segmentsOnFloor.map((segment, idx) => {
                     // Si le 'from' ou 'to' est un waypoint, le dessiner
                     const waypoints = [];
@@ -318,7 +313,7 @@ const MapViewer = ({ parcours, currentIndex }) => {
                             key={`waypoint-${idx}-${wpIdx}`}
                             cx={waypoint.x}
                             cy={waypoint.y}
-                            r="5"
+                            r="8"
                             fill="#4caf50"
                             stroke="#fff"
                             strokeWidth="2"
@@ -326,7 +321,71 @@ const MapViewer = ({ parcours, currentIndex }) => {
                     ));
                 })}
 
-                {/* Dessiner les œuvres */}
+                {/* Dessiner les escaliers/ascenseurs (points orange) */}
+                {(() => {
+                    // Collecter tous les escaliers/ascenseurs de cet étage (éviter les doublons)
+                    const stairsMap = new Map();
+                    
+                    segmentsOnFloor.forEach(segment => {
+                        // Vérifier 'from'
+                        if (segment.from.type === 'stairs' || segment.from.type === 'elevator') {
+                            const key = `${segment.from.x}-${segment.from.y}`;
+                            if (!stairsMap.has(key)) {
+                                stairsMap.set(key, {
+                                    x: segment.from.x,
+                                    y: segment.from.y,
+                                    type: segment.from.type
+                                });
+                            }
+                        }
+                        
+                        // Vérifier 'to'
+                        if (segment.to.type === 'stairs' || segment.to.type === 'elevator') {
+                            const key = `${segment.to.x}-${segment.to.y}`;
+                            if (!stairsMap.has(key)) {
+                                stairsMap.set(key, {
+                                    x: segment.to.x,
+                                    y: segment.to.y,
+                                    type: segment.to.type
+                                });
+                            }
+                        }
+                    });
+                    
+                    // Afficher tous les escaliers/ascenseurs
+                    return Array.from(stairsMap.values()).map((stair, idx) => (
+                        <g key={`stair-${idx}`}>
+                            {/* Cercle orange pour l'escalier */}
+                            <circle
+                                cx={stair.x}
+                                cy={stair.y}
+                                r="10"
+                                fill="#ff9800"
+                                stroke="#fff"
+                                strokeWidth="2"
+                            />
+                            {/* Icône escalier (lignes diagonales) */}
+                            <line
+                                x1={stair.x - 6}
+                                y1={stair.y + 4}
+                                x2={stair.x + 6}
+                                y2={stair.y - 4}
+                                stroke="#fff"
+                                strokeWidth="2"
+                            />
+                            <line
+                                x1={stair.x - 3}
+                                y1={stair.y + 4}
+                                x2={stair.x + 3}
+                                y2={stair.y - 4}
+                                stroke="#fff"
+                                strokeWidth="2"
+                            />
+                        </g>
+                    ));
+                })()}
+
+                {/* Dessiner les œuvres (cercles AGRANDIS) */}
                 {artworksOnFloor.map((artwork, idx) => {
                     const isCurrent = artwork.oeuvre_id === currentArtwork?.oeuvre_id;
                     const isPast = artwork.order < (currentArtwork?.order || 0);
@@ -334,18 +393,18 @@ const MapViewer = ({ parcours, currentIndex }) => {
                     
                     return (
                         <g key={artwork.oeuvre_id}>
-                            {/* Point de l'œuvre */}
+                            {/* Point de l'œuvre - AGRANDI */}
                             <circle
                                 cx={artwork.position.x}
                                 cy={artwork.position.y}
-                                r={isCurrent ? 12 : 8}
+                                r={isCurrent ? 16 : 12}
                                 className={`artwork-point ${isCurrent ? 'current' : ''} ${isPast ? 'visited' : ''}`}
                                 fill={isCurrent ? '#ff0000' : isPast ? '#888' : '#5dace2'}
                                 stroke="#fff"
-                                strokeWidth="2"
+                                strokeWidth="3"
                             />
                             
-                            {/* Numéro de l'ordre */}
+                            {/* Numéro de l'ordre - AGRANDI */}
                             <text
                                 x={artwork.position.x}
                                 y={artwork.position.y}
@@ -353,7 +412,7 @@ const MapViewer = ({ parcours, currentIndex }) => {
                                 textAnchor="middle"
                                 dominantBaseline="middle"
                                 fill="#fff"
-                                fontSize="10"
+                                fontSize="14"
                                 fontWeight="bold"
                             >
                                 {artwork.order}

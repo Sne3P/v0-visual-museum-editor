@@ -140,11 +140,17 @@ class PiperTTSService:
                 self.voice.config.sample_rate
             )
             
-            # Retourner le chemin relatif
-            relative_path = f"/uploads/audio/parcours_{parcours_id}/{output_filename}.wav"
-            logger.info(f"✅ Audio généré: {relative_path}")
+            # Calculer la durée réelle du fichier audio (en secondes)
+            audio_duration_seconds = len(audio) / self.voice.config.sample_rate
             
-            return relative_path
+            # Retourner le chemin relatif ET la durée réelle
+            relative_path = f"/uploads/audio/parcours_{parcours_id}/{output_filename}.wav"
+            logger.info(f"✅ Audio généré: {relative_path} (durée: {audio_duration_seconds:.2f}s)")
+            
+            return {
+                'path': relative_path,
+                'duration_seconds': audio_duration_seconds
+            }
             
         except Exception as e:
             logger.error(f"❌ Erreur lors de la génération audio pour {output_filename}: {e}")
@@ -155,7 +161,7 @@ class PiperTTSService:
         parcours_id: int,
         narrations: List[Dict[str, any]],
         language: str = None
-    ) -> Dict[int, str]:
+    ) -> Dict[int, Dict[str, any]]:
         """
         Génère tous les fichiers audio pour un parcours
         
@@ -165,7 +171,7 @@ class PiperTTSService:
             language: Langue optionnelle
             
         Returns:
-            Dictionnaire {oeuvre_id: audio_path}
+            Dictionnaire {oeuvre_id: {'path': str, 'duration_seconds': float}}
         """
         # Charger le modèle une seule fois
         self._load_model(language)
@@ -186,15 +192,15 @@ class PiperTTSService:
             filename = f"oeuvre_{oeuvre_id}"
             
             # Générer l'audio
-            audio_path = self.generate_audio(
+            audio_result = self.generate_audio(
                 text=text,
                 output_filename=filename,
                 parcours_id=parcours_id,
                 language=language
             )
             
-            if audio_path:
-                audio_paths[oeuvre_id] = audio_path
+            if audio_result:
+                audio_paths[oeuvre_id] = audio_result
         
         logger.info(f"✅ {len(audio_paths)}/{len(narrations)} audios générés avec succès")
         
