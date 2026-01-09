@@ -73,9 +73,13 @@ const MesChoix = () => {
       criteria[type] = name;  // {age: "adulte", thematique: "technique_picturale", ...}
     }
 
+    // Générer un seed unique pour ce parcours (timestamp + random)
+    const uniqueSeed = Date.now() + Math.floor(Math.random() * 10000);
+
     const apiPayload = {
       criteria: criteria,  // Format dict flexible pour N critères
       target_duration_minutes: timeValue * 60,
+      variation_seed: uniqueSeed,  // Seed unique pour éviter les collisions
       generate_audio: true
     };
 

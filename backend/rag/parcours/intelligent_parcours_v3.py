@@ -9,6 +9,7 @@ import psycopg2.extras
 from typing import Dict, List
 import sys
 import os
+import time
 
 # Support exécution directe et import module
 if __name__ == "__main__":
@@ -218,7 +219,8 @@ def generate_parcours_v3(
                     'walking_minutes': walk_time,
                     'narration_minutes': narration_time_min,
                     'observation_minutes': observation_time
-                }
+                },
+                'unique_parcours_id': seed if seed else int(time.time() * 1000)  # ID unique pour stockage audio
             }
         }
         

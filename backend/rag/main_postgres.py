@@ -1316,9 +1316,8 @@ def generate_intelligent_parcours():
         # Générer les audios si demandé
         if generate_audio:
             try:
-                # Extraire le parcours_id (format: "parcours_1234")
-                parcours_id_str = parcours_json.get('parcours_id', '')
-                parcours_id = int(parcours_id_str.split('_')[-1]) if '_' in parcours_id_str else int(time.time())
+                # Utiliser l'ID unique depuis les metadata (basé sur seed ou timestamp)
+                parcours_id = parcours_json.get('metadata', {}).get('unique_parcours_id', variation_seed or int(time.time() * 1000))
                 
                 # Préparer les narrations pour TTS
                 narrations = []
