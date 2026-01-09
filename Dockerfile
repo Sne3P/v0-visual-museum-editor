@@ -83,9 +83,15 @@ COPY public ./public
 COPY shared ./shared
 # COPY styles ./styles
 
+# Build arguments pour Next.js (URLs publiques)
+ARG NEXT_PUBLIC_BACKEND_URL=http://51.38.188.211:5000
+ARG NEXT_PUBLIC_API_URL=http://51.38.188.211:3000
+
 # Variables d'environnement pour le build
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_BACKEND_URL=$NEXT_PUBLIC_BACKEND_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 # Build Next.js
 RUN corepack enable && corepack prepare pnpm@latest --activate && \

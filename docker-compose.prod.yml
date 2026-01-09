@@ -153,6 +153,9 @@ services:
       args:
         BUILDKIT_INLINE_CACHE: 1
         NEXT_TELEMETRY_DISABLED: 1
+        # ⚠️ Variables NEXT_PUBLIC_* doivent être passées au build
+        NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://51.38.188.211:5000}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://51.38.188.211:3000}
     image: museum-app-prod:latest
     container_name: museum-app-prod
     restart: always
