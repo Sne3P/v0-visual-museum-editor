@@ -138,9 +138,10 @@ const MesChoix = () => {
           }
         }
         
+        // TODO: Désactivé temporairement pour debug - réactiver en prod
         // Déclencher un nettoyage des anciens fichiers (async, non-bloquant)
-        fetch('/api/cleanup/audio', { method: 'POST' })
-          .catch(err => console.warn('⚠️ Cleanup error:', err));
+        // fetch('/api/cleanup/audio', { method: 'POST' })
+        //   .catch(err => console.warn('⚠️ Cleanup error:', err));
         
         window.location.href = '/resume';
       } else {
