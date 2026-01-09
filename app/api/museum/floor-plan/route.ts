@@ -31,7 +31,7 @@ export async function OPTIONS() {
  */
 export async function GET(request: NextRequest) {
   try {
-    const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000'
+    const BACKEND_URL = process.env.BACKEND_API_URL || 'http://backend:5000'
     const floor = request.nextUrl.searchParams.get('floor')
     
     // Construire l'URL avec les paramètres optionnels

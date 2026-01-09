@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
     )
 
     // Rediriger vers le frontend client React (port 8080)
+    // En production: configure NEXT_PUBLIC_CLIENT_URL dans docker-compose ou .env
     const baseUrl = process.env.NEXT_PUBLIC_CLIENT_URL || 'http://localhost:8080'
     const qrUrl = `${baseUrl}/?token=${token}`
 

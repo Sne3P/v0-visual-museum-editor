@@ -171,9 +171,19 @@ services:
       DB_USER: museum_admin
       DB_PASSWORD: ${DB_PASSWORD:-Museum@2026!Secure}
       
-      # Backend API
+      # Backend API (internal Docker network)
       BACKEND_API_URL: http://backend:5000
-      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://localhost:5000}
+      BACKEND_URL: http://backend:5000
+      
+      # Admin API (internal Docker network - for internal container communication)
+      ADMIN_API_URL: http://app:3000
+      
+      # Client Frontend (internal Docker network)
+      NEXT_PUBLIC_CLIENT_URL: http://client:80
+      
+      # Public URLs (for frontend and redirects - will be overridden in production)
+      NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://backend:5000}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://app:3000}
       
       # Next.js PRODUCTION
       NODE_ENV: production
@@ -182,7 +192,7 @@ services:
       HOSTNAME: "0.0.0.0"
       
       # App
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
+      APP_ENV: production
     ports:
       - "3000:3000"
     volumes:
@@ -224,7 +234,10 @@ services:
       backend:
         condition: service_healthy
     environment:
-      REACT_APP_BACKEND_URL: http://localhost:5000
+      # Backend Flask API (internal Docker network)
+      REACT_APP_BACKEND_URL: http://backend:5000
+      # Admin Next.js (internal Docker network)
+      REACT_APP_ADMIN_URL: http://app:3000
     ports:
       - "8080:80"
     volumes:
