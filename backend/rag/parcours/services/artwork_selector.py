@@ -148,7 +148,6 @@ class ArtworkSelector:
                 o.date_oeuvre,
                 o.materiaux_technique,
                 o.image_link,
-                o.file_path,
                 p.pregeneration_text as narration,
                 LENGTH(p.pregeneration_text) as narration_length,
                 e_art.entity_id as artwork_entity_id,
@@ -169,7 +168,7 @@ class ArtworkSelector:
         for row in cur.fetchall():
             # Déterminer étage depuis plan_id
             plan_id = row['plan_id']
-            floor, floor_name = self._get_floor_from_plan(plan_id)
+            floor = self._get_floor_from_plan(plan_id)
             
             # Trouver salle contenant l'œuvre
             room_id = self.graph._find_room_containing_point(
@@ -182,8 +181,7 @@ class ArtworkSelector:
                 x=row['artwork_x'],
                 y=row['artwork_y'],
                 room=room_id,
-                floor=floor,
-                floor_name=floor_name
+                floor=floor
             )
             
             artwork_type = self._classify_artwork_type(row['materiaux_technique'])
@@ -202,23 +200,23 @@ class ArtworkSelector:
                 narration_duration=narration_seconds,
                 date_oeuvre=row.get('date_oeuvre', '') or '',
                 materiaux_technique=row.get('materiaux_technique', '') or '',
-                image_link=row.get('image_link', '') or '',
-                pdf_path=row.get('file_path', '') or ''
+                image_link=row.get('image_link', '') or ''
             ))
         
         cur.close()
         return artworks
     
-    def _get_floor_from_plan(self, plan_id: int) -> tuple:
-        """Récupère le floor_number et floor_name depuis la table plans"""
+    def _get_floor_from_plan(self, plan_id: int) -> int:
+        """Convertit plan_id en numéro d'étage"""
         cur = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT floor_number, nom FROM plans WHERE plan_id = %s", (plan_id,))
-        result = cur.fetchone()
+        cur.execute("SELECT plan_id FROM plans ORDER BY plan_id")
+        plans = [row['plan_id'] for row in cur.fetchall()]
         cur.close()
         
-        if result:
-            return (result['floor_number'], result['nom'])
-        return (0, "Étage 0")  # Fallback
+        try:
+            return plans.index(plan_id)
+        except ValueError:
+            return 0
     
     def _calculate_target_count(self, candidates: List[Artwork], target_duration_min: int) -> int:
         """Calcule nombre optimal d'œuvres selon durée cible"""

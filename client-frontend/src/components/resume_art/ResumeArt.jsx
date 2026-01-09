@@ -10,10 +10,15 @@ const ResumeArt = ({ artwork }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
 
-  // URL de l'audio
-  const audioUrl = artwork?.audio_path 
-    ? `${window.location.origin}${artwork.audio_path}`
-    : null;
+  // Backend URL pour préfixer les chemins relatifs
+  const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3000';
+
+  // URL de l'audio - préfixer si relatif
+  let audioUrl = artwork?.audio_path;
+  if (audioUrl && !audioUrl.startsWith('http')) {
+    audioUrl = `${backendUrl}${audioUrl}`;
+  }
+  audioUrl = audioUrl || null;
 
   // Mettre à jour le temps en cours
   useEffect(() => {
@@ -70,10 +75,16 @@ const ResumeArt = ({ artwork }) => {
 
   const progressPercentage = duration > 0 ? (currentTime / duration) * 100 : 0;
 
+  // Préfixer l'image URL si relative
+  let imageUrl = artwork?.image_url;
+  if (imageUrl && !imageUrl.startsWith('http') && !imageUrl.startsWith('/placeholder')) {
+    imageUrl = `${backendUrl}${imageUrl}`;
+  }
+
   return (
     <div className="resume-art">
       <div className="resume-art-image-wrapper">
-        <ResumeArtImage imageUrl={artwork?.image_url} title={artwork?.title} />
+        <ResumeArtImage imageUrl={imageUrl} title={artwork?.title} />
         <ResumeArtTopIcons />
 
         {/* Audio element (hidden) */}

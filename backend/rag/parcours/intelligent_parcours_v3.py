@@ -129,6 +129,14 @@ def generate_parcours_v3(
         print(f"   Durée estimée: {estimated_duration:.1f} min")
         print(f"   Étages: {floors_visited}")
         
+        # Charger les noms d'étages depuis plans
+        floor_names = {}
+        cur = conn.cursor()
+        cur.execute("SELECT plan_id, nom FROM plans ORDER BY plan_id")
+        for idx, row in enumerate(cur.fetchall()):
+            floor_names[idx] = row[1] or f"Étage {idx}"
+        cur.close()
+        
         # 9. Construire résultat (format compatible V2)
         # Calcul breakdown durée
         walk_time = path_optimizer.estimate_walk_time(optimized_artworks)
@@ -158,20 +166,19 @@ def generate_parcours_v3(
                 'artist': a.artist,
                 'date': getattr(a, 'date_oeuvre', ''),
                 'materiaux_technique': getattr(a, 'materiaux_technique', ''),
-                'image_url': getattr(a, 'image_link', ''),
-                'pdf_path': getattr(a, 'pdf_path', ''),
-                'audio_path': f'/audio/{a.oeuvre_id}.mp3',  # Generated audio path
                 'artwork_type': a.artwork_type,
                 'narration': a.narration,
                 'narration_word_count': int(a.narration_duration / 0.5),
                 'narration_duration': a.narration_duration,
                 'distance_to_next': distance_to_next / 1.4 / 60,  # mètres → minutes (vitesse 1.4 m/s)
+                'image_url': getattr(a, 'image_link', '') or '/placeholder.svg',
+                'audio_path': f'/uploads/audio/{a.oeuvre_id}.wav',
                 'position': {
                     'x': a.position.x,
                     'y': a.position.y,
                     'room': a.position.room,
                     'floor': a.position.floor,
-                    'floor_name': a.position.floor_name
+                    'floor_name': floor_names.get(a.position.floor, f'Étage {a.position.floor}')
                 }
             })
         

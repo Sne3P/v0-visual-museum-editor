@@ -88,20 +88,13 @@ export async function POST(request: NextRequest) {
       // NOTE: Chunks NOT truncated here - managed by force_regenerate during narration generation
       await client.query('TRUNCATE TABLE points, relations, entities, plans CASCADE')
 
-      // Insert plans with simple sequential floor_number (0, 1, 2, 3...)
-      // floor_number is ONLY used internally for ordering and pathfinding calculations
-      // The actual floor NAME is displayed to visitors (e.g., "Sous-sol", "RDC", "Étage 1")
-      for (let i = 0; i < exportData.plan_editor.plans.length; i++) {
-        const plan = exportData.plan_editor.plans[i]
-        
+      // Insert plans
+      for (const plan of exportData.plan_editor.plans) {
         await client.query(
-          'INSERT INTO plans (plan_id, nom, description, date_creation, floor_number) VALUES ($1, $2, $3, $4, $5)',
-          [plan.plan_id, plan.nom, plan.description || '', plan.date_creation, i]
+          'INSERT INTO plans (plan_id, nom, description, date_creation) VALUES ($1, $2, $3, $4)',
+          [plan.plan_id, plan.nom, plan.description || '', plan.date_creation]
         )
-        
-        console.log(`  ✅ Floor "${plan.nom}" → floor_number: ${i}`)
       }
-      console.log(`✅ ${exportData.plan_editor.plans.length} plans saved`)
 
       // UPSERT oeuvres (update if exists, insert if new) - PRESERVE pregenerations
       if (exportData.oeuvres_contenus?.oeuvres) {

@@ -31,12 +31,8 @@ CREATE TABLE IF NOT EXISTS plans (
     plan_id SERIAL PRIMARY KEY,
     nom TEXT NOT NULL,
     description TEXT,
-    date_creation DATE,
-    floor_number INTEGER NOT NULL DEFAULT 0
+    date_creation DATE
 );
-
--- Index pour floor_number
-CREATE INDEX IF NOT EXISTS idx_plans_floor_number ON plans(floor_number);
 
 -- ===============================
 -- TABLE : Artistes

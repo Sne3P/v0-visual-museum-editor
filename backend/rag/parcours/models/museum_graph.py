@@ -49,11 +49,11 @@ class MuseumGraphV2:
         """Charge salles, portes et escaliers depuis la DB"""
         cur = self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         
-        # Mapping plan_id → floor en utilisant floor_number
-        cur.execute("SELECT plan_id, floor_number FROM plans ORDER BY floor_number")
+        # Mapping plan_id → floor
+        cur.execute("SELECT plan_id, nom FROM plans ORDER BY plan_id")
         plan_to_floor = {}
-        for row in cur.fetchall():
-            plan_to_floor[row['plan_id']] = row['floor_number']
+        for idx, row in enumerate(cur.fetchall()):
+            plan_to_floor[row['plan_id']] = idx
         
         # Charger salles et créer mapping UUID→entity_id
         cur.execute("""

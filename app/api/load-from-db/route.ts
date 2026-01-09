@@ -3,7 +3,7 @@ import { queryPostgres } from '@/lib/database-postgres'
 
 export async function GET() {
   try {
-    const plans = await queryPostgres<any>('SELECT * FROM plans ORDER BY floor_number')
+    const plans = await queryPostgres<any>('SELECT * FROM plans ORDER BY plan_id')
     const entities = await queryPostgres<any>('SELECT * FROM entities ORDER BY entity_id')
     const points = await queryPostgres<any>('SELECT * FROM points ORDER BY entity_id, ordre')
     const oeuvres = await queryPostgres<any>('SELECT * FROM oeuvres')
