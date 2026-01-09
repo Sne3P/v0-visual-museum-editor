@@ -84,6 +84,14 @@ export default function NarrationsDashboard() {
   const [modalPregen, setModalPregen] = useState<Pregeneration | null>(null)
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'oeuvres' | 'narrations' | 'actions'>('oeuvres')
+  
+  // États pour génération précise
+  const [showGeneratePreciseModal, setShowGeneratePreciseModal] = useState(false)
+  const [selectedCombination, setSelectedCombination] = useState<Record<string, number> | null>(null)
+  
+  // États pour génération par profil
+  const [showGenerateByProfileModal, setShowGenerateByProfileModal] = useState(false)
+  const [profileForGeneration, setProfileForGeneration] = useState<Record<string, number> | null>(null)
 
   // Calcul du nombre attendu de narrations par œuvre (produit cartésien des critères)
    // Utiliser la valeur calculée par le backend
@@ -353,6 +361,87 @@ export default function NarrationsDashboard() {
   }
 
   // ==========================================
+  // NOUVELLES ACTIONS: GÉNÉRATION PRÉCISE & PAR PROFIL
+  // ==========================================
+
+  async function generatePreciseNarration(oeuvreId: number, combination: Record<string, number>) {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/admin/generate-narration-precise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          oeuvre_id: oeuvreId,
+          criteria_combination: combination
+        })
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        alert(`✅ Narration générée avec succès !`)
+        // Recharger les narrations
+        if (selectedOeuvre) {
+          await loadPregenerationsForOeuvre(oeuvreId)
+        }
+        await loadStats()
+        setShowGeneratePreciseModal(false)
+      } else {
+        alert(`❌ Erreur: ${data.error}`)
+      }
+    } catch (error) {
+      console.error('Erreur génération précise:', error)
+      alert(`❌ Erreur: ${error}`)
+    }
+    setLoading(false)
+  }
+
+  async function regenerateSingleNarration(pregen: Pregeneration) {
+    if (!selectedOeuvre) return
+
+    if (!confirm(`Régénérer cette narration ?\n\nProfil: ${Object.values(pregen.criteria_labels || {}).join(', ')}\n\nLa narration actuelle sera remplacée.`)) {
+      return
+    }
+
+    await generatePreciseNarration(selectedOeuvre.oeuvre_id, pregen.criteria_combination)
+  }
+
+  async function generateNarrationsByProfile(combination: Record<string, number>) {
+    const labels = Object.entries(combination).map(([type, id]) => {
+      const criteria = allCriterias.find(c => c.criteria_id === id)
+      return criteria ? criteria.label : `${type}:${id}`
+    })
+
+    if (!confirm(`Générer les narrations pour ce profil dans TOUTES les œuvres ?\n\nProfil: ${labels.join(', ')}\n\nCela peut prendre plusieurs minutes.`)) {
+      return
+    }
+
+    setLoading(true)
+    try {
+      const res = await fetch('/api/admin/generate-narrations-by-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          criteria_combination: combination
+        })
+      })
+
+      const data = await res.json()
+      if (data.success) {
+        alert(`✅ Génération terminée !\n\n${data.inserted} narrations générées\n${data.skipped} déjà existantes`)
+        await loadStats()
+        await loadOeuvres()
+        setShowGenerateByProfileModal(false)
+      } else {
+        alert(`❌ Erreur: ${data.error}`)
+      }
+    } catch (error) {
+      console.error('Erreur génération par profil:', error)
+      alert(`❌ Erreur: ${error}`)
+    }
+    setLoading(false)
+  }
+
+  // ==========================================
   // NAVIGATION
   // ==========================================
 
@@ -594,44 +683,87 @@ export default function NarrationsDashboard() {
                   <div className="text-center py-12">
                     <Database className="h-12 w-12 mx-auto mb-2 text-gray-300" />
                     <p className="text-gray-500 mb-4">Aucune narration pour cette œuvre</p>
-                    <Button
-                      onClick={() => generateNarrationsForOeuvre(selectedOeuvre.oeuvre_id)}
-                      disabled={loading}
-                    >
-                      <Zap className="h-4 w-4 mr-2" />
-                      Générer les narrations
-                    </Button>
+                    <div className="flex gap-2 justify-center">
+                      <Button
+                        onClick={() => generateNarrationsForOeuvre(selectedOeuvre.oeuvre_id)}
+                        disabled={loading}
+                      >
+                        <Zap className="h-4 w-4 mr-2" />
+                        Générer toutes les narrations
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowGeneratePreciseModal(true)
+                        }}
+                        disabled={loading}
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Générer 1 narration précise
+                      </Button>
+                    </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto">
-                    {pregenerations.map((pregen) => (
-                      <Card 
-                        key={pregen.pregeneration_id}
-                        className="cursor-pointer hover:shadow-md transition-shadow"
-                        onClick={() => setModalPregen(pregen)}
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <p className="text-sm text-gray-600">
+                        Cliquez sur une narration pour la voir ou la régénérer
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setShowGeneratePreciseModal(true)}
+                        disabled={loading}
                       >
-                        <CardHeader className="pb-2">
-                          <div className="flex flex-wrap gap-1">
-                            {Object.entries(pregen.criteria_labels || {}).map(([type, label]) => (
-                              <span
-                                key={type}
-                                className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium"
-                              >
-                                {label}
-                              </span>
-                            ))}
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Générer 1 narration
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto">
+                      {pregenerations.map((pregen) => (
+                        <Card 
+                          key={pregen.pregeneration_id}
+                          className="cursor-pointer hover:shadow-md transition-shadow group relative"
+                        >
+                          <div onClick={() => setModalPregen(pregen)}>
+                            <CardHeader className="pb-2">
+                              <div className="flex flex-wrap gap-1">
+                                {Object.entries(pregen.criteria_labels || {}).map(([type, label]) => (
+                                  <span
+                                    key={type}
+                                    className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium"
+                                  >
+                                    {label}
+                                  </span>
+                                ))}
+                              </div>
+                            </CardHeader>
+                            <CardContent>
+                              <p className="text-sm text-gray-700 line-clamp-3">
+                                {pregen.pregeneration_text.substring(0, 150)}...
+                              </p>
+                              <p className="text-xs text-gray-400 mt-2">
+                                Cliquer pour voir en entier
+                              </p>
+                            </CardContent>
                           </div>
-                        </CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-gray-700 line-clamp-3">
-                            {pregen.pregeneration_text.substring(0, 150)}...
-                          </p>
-                          <p className="text-xs text-gray-400 mt-2">
-                            Cliquer pour voir en entier
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ))}
+                          <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="bg-white"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                regenerateSingleNarration(pregen)
+                              }}
+                              disabled={loading}
+                            >
+                              <RefreshCw className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
@@ -702,6 +834,32 @@ export default function NarrationsDashboard() {
                         Supprime et recrée toutes les narrations
                       </p>
                     </div>
+                  </CardContent>
+                </Card>
+
+                {/* Génération par profil */}
+                <Card className="border-purple-200 bg-purple-50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-purple-700">
+                      <Sparkles className="h-5 w-5" />
+                      Génération par profil
+                    </CardTitle>
+                    <CardDescription>
+                      Générez toutes les narrations pour un profil spécifique dans toutes les œuvres.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Button 
+                      onClick={() => setShowGenerateByProfileModal(true)} 
+                      disabled={loading}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Générer par profil
+                    </Button>
+                    <p className="text-xs text-gray-600 mt-2">
+                      Choisissez un profil et générez cette combinaison pour toutes les œuvres
+                    </p>
                   </CardContent>
                 </Card>
 
@@ -813,7 +971,20 @@ export default function NarrationsDashboard() {
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
+            <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  if (selectedOeuvre && confirm('Régénérer cette narration ?')) {
+                    regenerateSingleNarration(modalPregen)
+                    setModalPregen(null)
+                  }
+                }}
+                disabled={loading || !selectedOeuvre}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Régénérer
+              </Button>
               <Button onClick={() => setModalPregen(null)}>
                 Fermer
               </Button>
@@ -821,6 +992,183 @@ export default function NarrationsDashboard() {
           </div>
         </div>
       )}
+
+      {/* Modal Génération Précise */}
+      {showGeneratePreciseModal && selectedOeuvre && (
+        <ProfileSelectorModal
+          title="Générer une narration précise"
+          description={`Sélectionnez un profil pour générer une narration pour "${selectedOeuvre.title}"`}
+          criteriaTypes={criteriaTypes}
+          allCriterias={allCriterias}
+          onConfirm={(combination) => {
+            generatePreciseNarration(selectedOeuvre.oeuvre_id, combination)
+          }}
+          onCancel={() => setShowGeneratePreciseModal(false)}
+          loading={loading}
+        />
+      )}
+
+      {/* Modal Génération par Profil */}
+      {showGenerateByProfileModal && (
+        <ProfileSelectorModal
+          title="Générer par profil"
+          description="Sélectionnez un profil pour générer cette combinaison dans TOUTES les œuvres"
+          criteriaTypes={criteriaTypes}
+          allCriterias={allCriterias}
+          onConfirm={(combination) => {
+            generateNarrationsByProfile(combination)
+          }}
+          onCancel={() => setShowGenerateByProfileModal(false)}
+          loading={loading}
+        />
+      )}
+    </div>
+  )
+}
+
+// ==========================================
+// COMPOSANT: ProfileSelectorModal
+// ==========================================
+
+interface ProfileSelectorModalProps {
+  title: string
+  description: string
+  criteriaTypes: CriteriaType[]
+  allCriterias: Criteria[]
+  onConfirm: (combination: Record<string, number>) => void
+  onCancel: () => void
+  loading: boolean
+}
+
+function ProfileSelectorModal({
+  title,
+  description,
+  criteriaTypes,
+  allCriterias,
+  onConfirm,
+  onCancel,
+  loading
+}: ProfileSelectorModalProps) {
+  const [selectedCombination, setSelectedCombination] = useState<Record<string, number>>({})
+
+  // Grouper les critères par type
+  const criteriaByType = criteriaTypes.reduce((acc, type) => {
+    acc[type.type] = allCriterias.filter(c => c.type === type.type)
+    return acc
+  }, {} as Record<string, Criteria[]>)
+
+  const isComplete = criteriaTypes
+    .filter(t => t.is_required)
+    .every(t => selectedCombination[t.type])
+
+  const handleConfirm = () => {
+    if (isComplete) {
+      onConfirm(selectedCombination)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+        {/* Header */}
+        <div className="p-6 border-b">
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="text-xl font-bold mb-2">{title}</h3>
+              <p className="text-sm text-gray-600">{description}</p>
+            </div>
+            <button
+              onClick={onCancel}
+              disabled={loading}
+              className="p-2 hover:bg-gray-100 rounded-full transition-colors disabled:opacity-50"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content scrollable */}
+        <div className="p-6 overflow-y-auto flex-1">
+          <div className="space-y-6">
+            {criteriaTypes.map(type => {
+              const options = criteriaByType[type.type] || []
+              const selected = selectedCombination[type.type]
+
+              return (
+                <div key={type.type}>
+                  <label className="block text-sm font-medium mb-2">
+                    {type.label}
+                    {type.is_required && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  <div className="grid grid-cols-1 gap-2">
+                    {options.map(criteria => (
+                      <button
+                        key={criteria.criteria_id}
+                        onClick={() => {
+                          setSelectedCombination(prev => ({
+                            ...prev,
+                            [type.type]: criteria.criteria_id
+                          }))
+                        }}
+                        className={`p-3 border rounded-lg text-left transition-all ${
+                          selected === criteria.criteria_id
+                            ? 'border-blue-500 bg-blue-50'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="font-medium">{criteria.label}</div>
+                        {criteria.description && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            {criteria.description}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t bg-gray-50 flex justify-between items-center">
+          <p className="text-sm text-gray-600">
+            {isComplete ? (
+              <span className="text-green-600 flex items-center gap-1">
+                <CheckCircle className="h-4 w-4" />
+                Profil complet
+              </span>
+            ) : (
+              <span className="text-amber-600 flex items-center gap-1">
+                <AlertCircle className="h-4 w-4" />
+                Sélectionnez tous les critères requis
+              </span>
+            )}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onCancel} disabled={loading}>
+              Annuler
+            </Button>
+            <Button 
+              onClick={handleConfirm} 
+              disabled={!isComplete || loading}
+            >
+              {loading ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Génération...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Générer
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

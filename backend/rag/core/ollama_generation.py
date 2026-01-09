@@ -19,14 +19,14 @@ class OllamaMediationSystem:
         self,
         *,
         ollama_url: Optional[str] = None,
-        default_model: str = "gemma3:4b",
-        timeout_s: int = 15000,
+        default_model: str = None,
+        timeout_s: int = 300000,  # 300 secondes = 5 minutes (pour les longues générations Ollama)
         temperature: float = 0.5,
         num_predict: int = -1,
         verbose: bool = True,
     ) -> None:
         self.ollama_url = (ollama_url or os.getenv("OLLAMA_API_URL", "http://localhost:11434")).rstrip("/")
-        self.default_model = default_model
+        self.default_model = default_model or os.getenv("OLLAMA_MODEL", "ministral-3:3b")
         self.timeout_s = timeout_s
         self.temperature = temperature
         self.num_predict = num_predict

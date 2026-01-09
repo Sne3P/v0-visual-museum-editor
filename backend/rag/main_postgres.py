@@ -397,6 +397,9 @@ from flask_cors import CORS
 import sys
 import os
 from pathlib import Path
+import psycopg2
+import psycopg2.extras
+import requests
 
 from .core.ollama_generation import OllamaMediationSystem
 
@@ -1959,6 +1962,291 @@ def get_floor_plan():
         
     except Exception as e:
         print(f"❌ Erreur récupération floor plan: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/generate-narration-precise', methods=['POST'])
+def admin_generate_narration_precise():
+    """
+    Génère UNE narration précise pour 1 œuvre + 1 profil spécifique
+    
+    POST /api/admin/generate-narration-precise
+    Body: {
+      "oeuvre_id": 1,
+      "criteria_combination": { "age": 1, "thematique": 5, "style_texte": 8 }
+    }
+    """
+    try:
+        import json as json_module
+        
+        data = request.get_json()
+        oeuvre_id = data.get('oeuvre_id')
+        criteria_combination = data.get('criteria_combination')
+        
+        if not oeuvre_id or not criteria_combination:
+            return jsonify({
+                'success': False,
+                'error': 'oeuvre_id et criteria_combination requis'
+            }), 400
+        
+        conn = _connect_postgres()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Charger l'œuvre COMPLÈTE avec toutes métadonnées
+        cur.execute("""
+            SELECT oeuvre_id, title, artist, description, date_oeuvre,
+                   materiaux_technique, provenance, contexte_commande,
+                   analyse_materielle_technique, iconographie_symbolique,
+                   anecdotes, reception_circulation_posterite,
+                   parcours_conservation_doc, room
+            FROM oeuvres WHERE oeuvre_id = %s
+        """, (oeuvre_id,))
+        artwork = cur.fetchone()
+        
+        if not artwork:
+            cur.close()
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': f'Œuvre {oeuvre_id} non trouvée'
+            }), 404
+        
+        # Charger les critères détaillés (avec name, description, ai_indication)
+        all_criteres = get_criteres()
+        
+        # Construire la combinaison enrichie avec les détails des critères
+        combinaison_enrichie = {}
+        for crit_type, crit_id in criteria_combination.items():
+            criteres_type = all_criteres.get(crit_type, [])
+            critere_detail = next((c for c in criteres_type if c['criteria_id'] == crit_id), None)
+            if critere_detail:
+                combinaison_enrichie[crit_type] = critere_detail
+        
+        if len(combinaison_enrichie) != len(criteria_combination):
+            cur.close()
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Critères invalides dans la combinaison'
+            }), 400
+        
+        # Initialiser le système Ollama
+        ollama_system = OllamaMediationSystem()
+        
+        # Générer la narration avec le système complet
+        result = ollama_system.generate_mediation_for_one_work(
+            artwork=dict(artwork),
+            combinaison=combinaison_enrichie,
+            duree_minutes=3
+        )
+        
+        if not result['success']:
+            cur.close()
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': result.get('error', 'Erreur génération Ollama')
+            }), 500
+        
+        narration = result['text']
+        
+        # UPSERT dans la DB
+        cur.execute("""
+            INSERT INTO pregenerations (
+                oeuvre_id, 
+                criteria_combination, 
+                pregeneration_text,
+                created_at,
+                updated_at
+            ) VALUES (%s, %s, %s, NOW(), NOW())
+            ON CONFLICT (oeuvre_id, criteria_combination) 
+            DO UPDATE SET 
+                pregeneration_text = EXCLUDED.pregeneration_text,
+                updated_at = NOW()
+            RETURNING pregeneration_id, created_at
+        """, (
+            oeuvre_id,
+            json_module.dumps(criteria_combination),
+            narration
+        ))
+        
+        db_result = cur.fetchone()
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        profile_str = ' / '.join([combinaison_enrichie[k]['name'] for k in combinaison_enrichie])
+        print(f"✅ Narration générée précise: oeuvre_id={oeuvre_id}, profil={profile_str}")
+        
+        return jsonify({
+            'success': True,
+            'pregeneration': {
+                'pregeneration_id': db_result['pregeneration_id'],
+                'oeuvre_id': oeuvre_id,
+                'criteria_combination': criteria_combination,
+                'pregeneration_text': narration,
+                'created_at': str(db_result['created_at'])
+            }
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Erreur génération narration précise: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/generate-narrations-by-profile', methods=['POST'])
+def admin_generate_narrations_by_profile():
+    """
+    Génère les narrations pour 1 profil spécifique dans TOUTES les œuvres
+    
+    POST /api/admin/generate-narrations-by-profile
+    Body: {
+      "criteria_combination": { "age": 1, "thematique": 5, "style_texte": 8 }
+    }
+    """
+    try:
+        import json as json_module
+        
+        data = request.get_json()
+        criteria_combination = data.get('criteria_combination')
+        
+        if not criteria_combination:
+            return jsonify({
+                'success': False,
+                'error': 'criteria_combination requis'
+            }), 400
+        
+        conn = _connect_postgres()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Charger toutes les œuvres
+        cur.execute("SELECT oeuvre_id, title, artist FROM oeuvres ORDER BY oeuvre_id")
+        artworks = cur.fetchall()
+        
+        if not artworks:
+            return jsonify({
+                'success': False,
+                'error': 'Aucune œuvre trouvée'
+            }), 404
+        
+        inserted = 0
+        skipped = 0
+        errors = []
+        
+        profile_str = ' / '.join([f"{k}:{v}" for k, v in criteria_combination.items()])
+        
+        # Charger les critères détaillés
+        all_criteres = get_criteres()
+        
+        # Construire la combinaison enrichie
+        combinaison_enrichie = {}
+        for crit_type, crit_id in criteria_combination.items():
+            criteres_type = all_criteres.get(crit_type, [])
+            critere_detail = next((c for c in criteres_type if c['criteria_id'] == crit_id), None)
+            if critere_detail:
+                combinaison_enrichie[crit_type] = critere_detail
+        
+        if len(combinaison_enrichie) != len(criteria_combination):
+            cur.close()
+            conn.close()
+            return jsonify({
+                'success': False,
+                'error': 'Critères invalides dans la combinaison'
+            }), 400
+        
+        # Initialiser le système Ollama
+        ollama_system = OllamaMediationSystem()
+        
+        # Générer pour chaque œuvre
+        for artwork in artworks:
+            try:
+                # Vérifier si déjà exists
+                cur.execute("""
+                    SELECT pregeneration_id FROM pregenerations 
+                    WHERE oeuvre_id = %s AND criteria_combination = %s
+                """, (artwork['oeuvre_id'], json_module.dumps(criteria_combination)))
+                
+                if cur.fetchone():
+                    skipped += 1
+                    continue
+                
+                # Charger métadonnées complètes de l'œuvre
+                cur.execute("""
+                    SELECT oeuvre_id, title, artist, description, date_oeuvre,
+                           materiaux_technique, provenance, contexte_commande,
+                           analyse_materielle_technique, iconographie_symbolique,
+                           anecdotes, reception_circulation_posterite,
+                           parcours_conservation_doc, room
+                    FROM oeuvres WHERE oeuvre_id = %s
+                """, (artwork['oeuvre_id'],))
+                full_artwork = cur.fetchone()
+                
+                if not full_artwork:
+                    errors.append(f"⚠️  {artwork['title']}: Métadonnées non trouvées")
+                    skipped += 1
+                    continue
+                
+                # Générer la narration avec le système complet
+                result = ollama_system.generate_mediation_for_one_work(
+                    artwork=dict(full_artwork),
+                    combinaison=combinaison_enrichie,
+                    duree_minutes=3
+                )
+                
+                if not result['success']:
+                    errors.append(f"⚠️  {artwork['title']}: {result.get('error', 'Ollama génération échouée')}")
+                    skipped += 1
+                    continue
+                
+                narration = result['text']
+                
+                # Insérer dans la DB
+                cur.execute("""
+                    INSERT INTO pregenerations (
+                        oeuvre_id, 
+                        criteria_combination, 
+                        pregeneration_text,
+                        created_at,
+                        updated_at
+                    ) VALUES (%s, %s, %s, NOW(), NOW())
+                """, (
+                    artwork['oeuvre_id'],
+                    json_module.dumps(criteria_combination),
+                    narration
+                ))
+                
+                inserted += 1
+                print(f"✅ {artwork['title']}: narration générée")
+                
+            except Exception as e:
+                errors.append(f"❌ {artwork['title']}: {str(e)}")
+                skipped += 1
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        message = f"{inserted} narrations générées, {skipped} skippées"
+        if errors:
+            message += f"\n\nErreurs:\n" + '\n'.join(errors[:5])
+        
+        print(f"✅ Génération par profil {profile_str} complétée: {message}")
+        
+        return jsonify({
+            'success': True,
+            'inserted': inserted,
+            'skipped': skipped,
+            'errors': errors,
+            'message': message
+        }), 200
+        
+    except Exception as e:
+        print(f"❌ Erreur génération par profil: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
