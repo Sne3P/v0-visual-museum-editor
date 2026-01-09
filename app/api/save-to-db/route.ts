@@ -1,5 +1,6 @@
 ﻿import { NextRequest, NextResponse } from 'next/server'
 import { getPostgresClient } from '@/lib/database-postgres'
+import type { PoolClient } from 'pg'
 import { promises as fs } from 'fs'
 import path from 'path'
 
@@ -46,10 +47,27 @@ async function cleanupOrphanPdfs(savedOeuvres: any[]) {
 }
 
 export async function POST(request: NextRequest) {
-  const client = await getPostgresClient()
+  let client: PoolClient | null = null
 
   try {
-    const body = await request.json()
+    try {
+      client = await getPostgresClient()
+    } catch (connectionError: any) {
+      console.error('❌ PostgreSQL connection error:', connectionError)
+      return NextResponse.json(
+        { error: `Database connection failed: ${connectionError?.message || 'unknown error'}` },
+        { status: 500 }
+      )
+    }
+
+    const body = await request.json().catch((err) => {
+      console.error('❌ Invalid JSON body:', err)
+      return null
+    })
+
+    if (!body) {
+      return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 })
+    }
     
     // Support both formats: direct exportData or wrapped { exportData }
     const exportData = body.exportData || body
@@ -59,25 +77,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid data format' }, { status: 400 })
     }
 
-    await client.query('BEGIN')
+    await client!.query('BEGIN')
+
+    // Check optional tables that may not exist yet (eg: pregenerations in fresh DB)
+    const pregenerationsExists = await client!
+      .query(`SELECT to_regclass('public.pregenerations') AS regclass`)
+      .then((res) => Boolean(res.rows?.[0]?.regclass))
+      .catch((err) => {
+        console.warn('⚠️  Unable to check pregenerations table:', err)
+        return false
+      })
 
     try {
       // Clear existing plan data (entities, points, relations) but KEEP oeuvres and pregenerations
       // First, remove oeuvre_id from entities to break FK cascade
-      await client.query('UPDATE entities SET oeuvre_id = NULL WHERE oeuvre_id IS NOT NULL')
+      await client!.query('UPDATE entities SET oeuvre_id = NULL WHERE oeuvre_id IS NOT NULL')
       
       // Delete orphaned oeuvres (created but never saved to plan)
       // BUT keep oeuvres with pregenerations (expensive LLM content)
-      const orphansResult = await client.query(`
+      const deleteOrphansQuery = `
         DELETE FROM oeuvres
         WHERE oeuvre_id NOT IN (
           SELECT DISTINCT oeuvre_id FROM entities WHERE oeuvre_id IS NOT NULL
         )
+        ${pregenerationsExists ? `
         AND oeuvre_id NOT IN (
           SELECT DISTINCT oeuvre_id FROM pregenerations WHERE oeuvre_id IS NOT NULL
         )
+        ` : ''}
         RETURNING oeuvre_id, title
-      `)
+      `
+
+      const orphansResult = await client!.query(deleteOrphansQuery)
       
       if (orphansResult.rows.length > 0) {
         console.log(`🗑️  Suppression ${orphansResult.rows.length} oeuvre(s) orpheline(s):`,
@@ -86,11 +117,11 @@ export async function POST(request: NextRequest) {
       
       // Now truncate plan geometry safely
       // NOTE: Chunks NOT truncated here - managed by force_regenerate during narration generation
-      await client.query('TRUNCATE TABLE points, relations, entities, plans CASCADE')
+      await client!.query('TRUNCATE TABLE points, relations, entities, plans CASCADE')
 
       // Insert plans
       for (const plan of exportData.plan_editor.plans) {
-        await client.query(
+        await client!.query(
           'INSERT INTO plans (plan_id, nom, description, date_creation) VALUES ($1, $2, $3, $4)',
           [plan.plan_id, plan.nom, plan.description || '', plan.date_creation]
         )
@@ -103,7 +134,7 @@ export async function POST(request: NextRequest) {
           const meta = oeuvre.metadata || {}
           console.log(`📝 Sauvegarde œuvre: ${oeuvre.title}, artist: ${oeuvre.artist}, metadata:`, meta)
           
-          await client.query(
+          await client!.query(
             `INSERT INTO oeuvres (
               oeuvre_id, title, artist, description, image_link, pdf_link, file_name, file_path, room,
               date_oeuvre, materiaux_technique, provenance, contexte_commande,
@@ -158,7 +189,7 @@ export async function POST(request: NextRequest) {
       // Insert entities
       if (exportData.plan_editor.entities) {
         for (const entity of exportData.plan_editor.entities) {
-          await client.query(
+          await client!.query(
             `INSERT INTO entities (entity_id, plan_id, name, entity_type, description, oeuvre_id) 
              VALUES ($1, $2, $3, $4, $5, $6)`,
             [
@@ -176,7 +207,7 @@ export async function POST(request: NextRequest) {
       // Insert points
       if (exportData.plan_editor.points) {
         for (const point of exportData.plan_editor.points) {
-          await client.query(
+          await client!.query(
             'INSERT INTO points (point_id, entity_id, x, y, ordre) VALUES ($1, $2, $3, $4, $5)',
             [point.point_id, point.entity_id, point.x, point.y, point.ordre]
           )
@@ -210,7 +241,7 @@ export async function POST(request: NextRequest) {
       // NOT saved from frontend to avoid polluting database with empty chunks
       // The RAG pipeline handles: PDF → chunks → embeddings → FAISS index
 
-      await client.query('COMMIT')
+      await client!.query('COMMIT')
       
       // Nettoyage des PDFs orphelins en arrière-plan (ne bloque pas la réponse)
       cleanupOrphanPdfs(exportData.oeuvres_contenus?.oeuvres || []).catch(err => {
@@ -228,14 +259,19 @@ export async function POST(request: NextRequest) {
       })
 
     } catch (error) {
-      await client.query('ROLLBACK')
+      await client!.query('ROLLBACK')
       throw error
     }
 
   } catch (error: any) {
-    console.error('Save error:', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('Save error:', {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      stack: error?.stack
+    })
+    return NextResponse.json({ error: error?.message || 'Internal server error' }, { status: 500 })
   } finally {
-    client.release()
+    client?.release()
   }
 }

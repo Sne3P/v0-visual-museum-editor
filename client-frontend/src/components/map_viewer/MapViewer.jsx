@@ -292,7 +292,7 @@ const MapViewer = ({ parcours, currentIndex }) => {
                     // Si le 'from' ou 'to' est un waypoint, le dessiner
                     const waypoints = [];
                     
-                    if (segment.from.type === 'waypoint') {
+                    if (segment.from.type === 'door') {
                         waypoints.push({
                             x: segment.from.x,
                             y: segment.from.y,
@@ -300,7 +300,7 @@ const MapViewer = ({ parcours, currentIndex }) => {
                         });
                     }
                     
-                    if (segment.to.type === 'waypoint') {
+                    if (segment.to.type === 'door') {
                         waypoints.push({
                             x: segment.to.x,
                             y: segment.to.y,

@@ -34,6 +34,9 @@ class SegmentBuilder:
             Liste de segments {from, to, distance, floor, segment_index}
         """
         all_segments = []
+        stairs_count = 0
+        elevator_count = 0
+        waypoint_count = 0
         
         for i in range(len(artworks) - 1):
             from_artwork = artworks[i]
@@ -45,12 +48,30 @@ class SegmentBuilder:
                 to_artwork.position
             )
             
+            # Compter les types de waypoints
+            for wp in waypoints:
+                if wp.type == 'stairs':
+                    stairs_count += 1
+                elif wp.type == 'elevator':
+                    elevator_count += 1
+                elif wp.type == 'waypoint' or wp.type == 'door':
+                    waypoint_count += 1
+                
+                # Log pour débogage escaliers/ascenseurs
+                if wp.type in ['stairs', 'elevator']:
+                    print(f"  🔸 {wp.type.upper()} détecté: pos=({wp.position['x']:.1f}, {wp.position['y']:.1f}), floor={wp.position['floor']}")
+            
             # Construire segments
             segments = self._create_segments_from_waypoints(
                 from_artwork, to_artwork, waypoints, i
             )
             
             all_segments.extend(segments)
+        
+        print(f"\n📍 Waypoints dans les segments:")
+        print(f"   🚪 Portes/Waypoints: {waypoint_count}")
+        print(f"   🪜 Escaliers: {stairs_count}")
+        print(f"   🛗 Ascenseurs: {elevator_count}")
         
         return all_segments
     

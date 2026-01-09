@@ -222,7 +222,7 @@ class ConnectivityChecker:
                         visited.add((stair.room_id_to, stair.floor_to))
                         
                         stair_start = Waypoint(
-                            type='stairway',
+                            type=stair.vertical_type,  # 'stairs' ou 'elevator'
                             position={'x': stair.center_x_from, 'y': stair.center_y_from,
                                      'floor': stair.floor_from, 'room': stair.room_id_from},
                             entity_id=stair.entity_id_from,
@@ -231,7 +231,7 @@ class ConnectivityChecker:
                         )
                         
                         stair_exit = Waypoint(
-                            type='stairway_exit',
+                            type=stair.vertical_type,  # 'stairs' ou 'elevator'
                             position={'x': stair.center_x_to, 'y': stair.center_y_to,
                                      'floor': stair.floor_to, 'room': stair.room_id_to},
                             entity_id=stair.entity_id_to,
@@ -257,7 +257,7 @@ class ConnectivityChecker:
                         visited.add((stair.room_id_from, stair.floor_from))
                         
                         stair_start = Waypoint(
-                            type='stairway',
+                            type=stair.vertical_type,  # 'stairs' ou 'elevator'
                             position={'x': stair.center_x_to, 'y': stair.center_y_to,
                                      'floor': stair.floor_to, 'room': stair.room_id_to},
                             entity_id=stair.entity_id_to,
@@ -266,7 +266,7 @@ class ConnectivityChecker:
                         )
                         
                         stair_exit = Waypoint(
-                            type='stairway_exit',
+                            type=stair.vertical_type,  # 'stairs' ou 'elevator'
                             position={'x': stair.center_x_from, 'y': stair.center_y_from,
                                      'floor': stair.floor_from, 'room': stair.room_id_from},
                             entity_id=stair.entity_id_from,
