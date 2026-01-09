@@ -128,7 +128,6 @@ services:
       - "5000:5000"
     volumes:
       - uploads_data_dev:/app/uploads
-      - audio_data_dev:/app/uploads/audio
     networks:
       - museum-network
     healthcheck:
@@ -170,6 +169,7 @@ services:
       
       # Backend API
       BACKEND_API_URL: http://backend:5000
+      BACKEND_URL: http://backend:5000
       NEXT_PUBLIC_BACKEND_URL: http://localhost:5000
       
       # Next.js DEV
@@ -182,7 +182,6 @@ services:
       - "3000:3000"
     volumes:
       - uploads_data_dev:/app/public/uploads
-      - audio_data_dev:/app/public/uploads/audio
     networks:
       - museum-network
     healthcheck:
@@ -214,7 +213,7 @@ services:
     ports:
       - "8080:80"
     volumes:
-      - audio_data_dev:/usr/share/nginx/html/uploads/audio:ro
+      - uploads_data_dev:/usr/share/nginx/html/uploads:ro
     networks:
       - museum-network
     healthcheck:

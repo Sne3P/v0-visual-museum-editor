@@ -172,7 +172,6 @@ def generate_parcours_v3(
                 'narration_duration': a.narration_duration,
                 'distance_to_next': distance_to_next / 1.4 / 60,  # mètres → minutes (vitesse 1.4 m/s)
                 'image_url': getattr(a, 'image_link', '') or '/placeholder.svg',
-                'audio_path': f'/uploads/audio/{a.oeuvre_id}.wav',
                 'position': {
                     'x': a.position.x,
                     'y': a.position.y,
