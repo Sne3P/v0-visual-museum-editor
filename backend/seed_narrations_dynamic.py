@@ -5,16 +5,21 @@ Script de seed INTELLIGENT pour narrations prégénérées avec critères DYNAMI
 - Génère toutes les combinaisons possibles
 - Remplit SEULEMENT les narrations manquantes (pas de remplacement)
 - Support du format JSONB pour criteria_combination
+- Utilise Ollama pour générer de vraies narrations
 """
 
 import psycopg2
 import psycopg2.extras
 import os
 import json
+import sys
 from itertools import product
+from pathlib import Path
 
-# Lorem Ipsum pour simuler les narrations
-LOREM_IPSUM = """Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."""
+# Ajouter le chemin du module backend pour importer rag
+sys.path.insert(0, str(Path(__file__).parent))
+
+from rag.core.ollama_generation import OllamaMediationSystem
 
 def connect_db():
     """Connexion à PostgreSQL"""
@@ -31,7 +36,7 @@ def get_criteria_types_and_options(conn):
     """Récupère tous les types de critères et leurs options depuis la DB
     
     Returns:
-        Dict[str, List[Dict]] - {"age": [{criteria_id: 1, name: "enfant", ...}], ...}
+        Dict[str, List[Dict]] - {"age": [{criteria_id: 1, name: "enfant", label: "Enfant", description: "...", ai_indication: "...", ...}], ...}
     """
     with conn.cursor() as cur:
         # 1. Charger les types de critères (ordre important)
@@ -51,13 +56,13 @@ def get_criteria_types_and_options(conn):
             req_flag = "✅ REQUIS" if t['is_required'] else "⚪ Optionnel"
             print(f"   [{t['ordre']}] {t['type']} - {t['label']} ({req_flag})")
         
-        # 2. Charger les options pour chaque type
+        # 2. Charger les options pour chaque type (AVEC tous les détails pour Ollama)
         criteria_map = {}
         for type_row in types:
             type_name = type_row['type']
             
             cur.execute("""
-                SELECT criteria_id, type, name, label, description, ordre
+                SELECT criteria_id, type, name, label, description, ordre, ai_indication
                 FROM criterias
                 WHERE type = %s
                 ORDER BY ordre
@@ -128,19 +133,24 @@ def get_existing_pregenerations(conn, oeuvre_id):
         
         return existing
 
-def seed_missing_narrations(conn, oeuvres, all_combinations):
-    """Remplit SEULEMENT les narrations manquantes (intelligent)"""
+def seed_missing_narrations(conn, oeuvres, all_combinations, criteria_map):
+    """Remplit SEULEMENT les narrations manquantes avec génération Ollama"""
     
     total_combos = len(all_combinations)
     total_possible = len(oeuvres) * total_combos
     
-    print(f"\n🌱 Début du seed intelligent...")
+    print(f"\n🌱 Début du seed intelligent avec Ollama...")
     print(f"   - {len(oeuvres)} œuvres trouvées")
     print(f"   - {total_combos} combinaisons de critères possibles")
     print(f"   - {total_possible} narrations maximales\n")
     
+    # Initialiser le système Ollama
+    print("🤖 Initialisation du générateur Ollama...")
+    ollama_system = OllamaMediationSystem()
+    
     inserted = 0
     skipped = 0
+    errors = 0
     
     with conn.cursor() as cur:
         for oeuvre in oeuvres:
@@ -148,11 +158,28 @@ def seed_missing_narrations(conn, oeuvres, all_combinations):
             title = oeuvre['title']
             artist = oeuvre['artist']
             
+            # Charger les métadonnées complètes de l'œuvre
+            cur.execute("""
+                SELECT oeuvre_id, title, artist, description, date_oeuvre,
+                       materiaux_technique, provenance, contexte_commande,
+                       analyse_materielle_technique, iconographie_symbolique,
+                       anecdotes, reception_circulation_posterite,
+                       parcours_conservation_doc, room
+                FROM oeuvres WHERE oeuvre_id = %s
+            """, (oeuvre_id,))
+            artwork_full = cur.fetchone()
+            
+            if not artwork_full:
+                print(f"⚠️  Œuvre {oeuvre_id} non trouvée en détail, skip")
+                continue
+            
             # Récupérer les combinaisons existantes
             existing = get_existing_pregenerations(conn, oeuvre_id)
             
-            print(f"📝 Œuvre #{oeuvre_id}: {title} ({artist})")
+            print(f"\n📝 Œuvre #{oeuvre_id}: {title} ({artist})")
             print(f"   Déjà prégénéré: {len(existing)}/{total_combos}")
+            
+            new_in_this_oeuvre = 0
             
             # Insérer seulement les combinaisons manquantes
             for combination in all_combinations:
@@ -162,26 +189,78 @@ def seed_missing_narrations(conn, oeuvres, all_combinations):
                     skipped += 1
                     continue
                 
-                # Créer une narration unique par combinaison
-                criteria_labels = ", ".join([f"{k}={v}" for k, v in sorted(combination.items())])
-                narration = f"{LOREM_IPSUM[:250]}... [Critères: {criteria_labels}]"
+                # Construire la combinaison enrichie pour Ollama
+                # combination = {"age": 1, "thematique": 4, ...}
+                combinaison_enrichie = {}
+                for crit_type, crit_id in combination.items():
+                    # Trouver les détails du critère
+                    criteres_type = criteria_map.get(crit_type, [])
+                    critere_detail = next((c for c in criteres_type if c['criteria_id'] == crit_id), None)
+                    if critere_detail:
+                        combinaison_enrichie[crit_type] = {
+                            'criteria_id': critere_detail['criteria_id'],
+                            'name': critere_detail['name'],
+                            'label': critere_detail['label'],
+                            'description': critere_detail.get('description'),
+                            'ai_indication': critere_detail.get('ai_indication')
+                        }
+                
+                if len(combinaison_enrichie) != len(combination):
+                    print(f"   ⚠️  Combinaison invalide, skip: {combination}")
+                    errors += 1
+                    continue
+                
+                # Générer la narration avec Ollama
+                try:
+                    result = ollama_system.generate_mediation_for_one_work(
+                        artwork=dict(artwork_full),
+                        combinaison=combinaison_enrichie,
+                        duree_minutes=3
+                    )
+                    
+                    if not result['success']:
+                        print(f"   ❌ Erreur génération: {result.get('error')}")
+                        errors += 1
+                        continue
+                    
+                    narration = result['text']
+                    
+                except Exception as e:
+                    print(f"   ❌ Exception génération: {e}")
+                    errors += 1
+                    continue
                 
                 # Insérer avec JSONB
-                cur.execute("""
-                    INSERT INTO pregenerations 
-                    (oeuvre_id, criteria_combination, pregeneration_text)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (oeuvre_id, criteria_combination) DO NOTHING
-                """, (oeuvre_id, json.dumps(combination), narration))
-                
-                inserted += 1
+                try:
+                    cur.execute("""
+                        INSERT INTO pregenerations 
+                        (oeuvre_id, criteria_combination, pregeneration_text)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (oeuvre_id, criteria_combination) DO NOTHING
+                    """, (oeuvre_id, json.dumps(combination), narration))
+                    
+                    inserted += 1
+                    new_in_this_oeuvre += 1
+                    
+                    # Commit après chaque insertion pour éviter de perdre tout en cas d'erreur
+                    conn.commit()
+                    
+                    # Afficher progression
+                    criteria_labels = ", ".join([f"{k}={combinaison_enrichie[k]['name']}" for k in sorted(combinaison_enrichie.keys())])
+                    print(f"   ✅ [{new_in_this_oeuvre}] Généré: {criteria_labels}")
+                    
+                except Exception as e:
+                    print(f"   ❌ Erreur DB insert: {e}")
+                    errors += 1
+                    conn.rollback()
+                    continue
             
-            conn.commit()
-            print(f"   ✅ {inserted - (skipped - len(existing) * (oeuvre_id - 1))} nouvelles narrations ajoutées\n")
+            print(f"   📊 Bilan œuvre: {new_in_this_oeuvre} nouvelles narrations")
     
     print(f"\n✅ Seed terminé!")
     print(f"   - {inserted} nouvelles narrations insérées")
     print(f"   - {skipped} combinaisons déjà existantes (non modifiées)")
+    print(f"   - {errors} erreurs de génération")
     print(f"   - Total dans la base: {inserted + skipped} narrations\n")
 
 def insert_pregeneration_criterias(conn):
@@ -248,7 +327,7 @@ def show_statistics(conn):
 def main():
     """Point d'entrée principal"""
     print("=" * 70)
-    print("🌱 SCRIPT DE SEED INTELLIGENT - NARRATIONS DYNAMIQUES")
+    print("🌱 SCRIPT DE SEED INTELLIGENT - NARRATIONS DYNAMIQUES AVEC OLLAMA")
     print("=" * 70)
     
     try:
@@ -276,8 +355,8 @@ def main():
             print("   Veuillez d'abord insérer des œuvres dans la table 'oeuvres'")
             return
         
-        # 4. Seed intelligent (seulement les manquantes)
-        seed_missing_narrations(conn, oeuvres, all_combinations)
+        # 4. Seed intelligent avec Ollama (seulement les manquantes)
+        seed_missing_narrations(conn, oeuvres, all_combinations, criteria_map)
         
         # 5. Remplir la table de liaison
         insert_pregeneration_criterias(conn)

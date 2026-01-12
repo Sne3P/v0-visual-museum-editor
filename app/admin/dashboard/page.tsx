@@ -303,22 +303,25 @@ export default function NarrationsDashboard() {
   }
 
   async function generateAllMissingNarrations() {
-    const expectedTotal = oeuvres.length * (stats?.expected_pregenerations || 36)
+    const expectedTotal = oeuvres.length * (stats?.expected_per_oeuvre || 36)
     const missing = expectedTotal - (stats?.total_pregenerations || 0)
 
-    if (!confirm(`Générer toutes les narrations manquantes ?\n\n${missing} narrations seront créées pour ${oeuvres.length} œuvres.`)) {
+    if (!confirm(`Générer toutes les narrations manquantes pour ${oeuvres.length} œuvres ?\n\nCela va utiliser Ollama pour générer les narrations.\nCette opération peut prendre plusieurs minutes.`)) {
       return
     }
 
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/seed-narrations', {
-        method: 'POST'
+      const res = await fetch('/api/admin/pregenerate-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force_regenerate: false })
       })
 
       const data = await res.json()
       if (data.success) {
-        alert(`✅ Génération terminée !\n\n${data.inserted} nouvelles narrations\n${data.skipped} déjà existantes`)
+        const stats = data.stats || {}
+        alert(`✅ Génération terminée !\n\n${stats.total_generated || 0} nouvelles narrations\n${stats.total_skipped || 0} déjà existantes\n\nDurée: ${data.duration || 'N/A'}`)
         await loadStats()
         await loadOeuvres()
       } else {
@@ -332,7 +335,7 @@ export default function NarrationsDashboard() {
   }
 
   async function regenerateAllNarrations() {
-    if (!confirm('⚠️ ATTENTION !\n\nRégénérer TOUTES les narrations ?\n\nCela va supprimer et recréer toutes les narrations existantes.')) {
+    if (!confirm('⚠️ ATTENTION !\n\nRégénérer TOUTES les narrations ?\n\nCela va supprimer et recréer toutes les narrations existantes.\nCette opération peut prendre plusieurs minutes.')) {
       return
     }
 
@@ -341,12 +344,17 @@ export default function NarrationsDashboard() {
       // 1. Supprimer
       await fetch('/api/admin/delete-all-narrations', { method: 'DELETE' })
       
-      // 2. Re-seed
-      const res = await fetch('/api/admin/seed-narrations', { method: 'POST' })
+      // 2. Re-générer avec Ollama (force_regenerate pour tout recréer)
+      const res = await fetch('/api/admin/pregenerate-all', { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force_regenerate: true })
+      })
       const data = await res.json()
       
       if (data.success) {
-        alert(`✅ Régénération terminée !\n\n${data.inserted} narrations créées`)
+        const stats = data.stats || {}
+        alert(`✅ Régénération terminée !\n\n${stats.total_generated || 0} narrations créées\n\nDurée: ${data.duration || 'N/A'}`)
         await loadStats()
         await loadOeuvres()
         setPregenerations([])

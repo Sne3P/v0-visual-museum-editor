@@ -1120,28 +1120,101 @@ def pregenerate_single_artwork(oeuvre_id):
 @app.route('/api/pregenerate-all', methods=['POST'])
 def pregenerate_all_artworks():
     """Lance la prégénération COMPLÈTE Ollama pour TOUTES les œuvres
-    Flux complet RAG+FAISS+Ollama pour chaque œuvre"""
+    Utilise le même système que pregenerate_single_artwork mais pour toutes les œuvres"""
     try:
-        from .core.ollama_pregeneration_complete import get_ollama_pregeneration_system
+        import time
+        start_time = time.time()
         
         data = request.get_json() or {}
         force_regenerate = data.get('force_regenerate', False)
         
-        system = get_ollama_pregeneration_system()
-        result = system.pregenerate_all_artworks(force_regenerate=force_regenerate)
+        # Récupérer toutes les œuvres
+        conn = _connect_postgres()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT oeuvre_id FROM oeuvres ORDER BY oeuvre_id")
+        oeuvres = cur.fetchall()
+        cur.close()
+        conn.close()
         
-        if result.get('success'):
-            return jsonify({
-                'success': True,
-                'message': 'Prégénération globale terminée avec Ollama',
-                'stats': result.get('stats'),
-                'duration': result.get('duration')
-            })
-        else:
+        if not oeuvres:
             return jsonify({
                 'success': False,
-                'error': result.get('error')
-            }), 500
+                'error': 'Aucune œuvre trouvée dans la base de données'
+            }), 404
+        
+        print(f"\n{'='*80}")
+        print(f"🎨 PRÉGÉNÉRATION GLOBALE - {len(oeuvres)} ŒUVRES")
+        print(f"{'='*80}")
+        
+        # Initialiser le système Ollama une seule fois
+        system = OllamaMediationSystem()
+        all_criteres = get_criteres()
+        combinaisons = system.generate_combinaisons(all_criteres)
+        
+        print(f"📋 {len(combinaisons)} combinaisons de critères à générer par œuvre")
+        
+        total_stats = {
+            'total_oeuvres': len(oeuvres),
+            'total_generated': 0,
+            'total_skipped': 0,
+            'total_errors': 0,
+            'oeuvres_processed': 0
+        }
+        
+        # Traiter chaque œuvre
+        for idx, oeuvre_row in enumerate(oeuvres):
+            oeuvre_id = oeuvre_row['oeuvre_id']
+            
+            print(f"\n[{idx+1}/{len(oeuvres)}] Traitement œuvre ID {oeuvre_id}...")
+            
+            try:
+                artwork = get_artwork(oeuvre_id)
+                if not artwork:
+                    print(f"   ⚠️  Œuvre {oeuvre_id} non trouvée, skip")
+                    total_stats['total_errors'] += 1
+                    continue
+                
+                result = system.pregenerate_artwork(
+                    oeuvre_id=oeuvre_id,
+                    artwork=artwork,
+                    combinaisons=combinaisons,
+                    model="ministral-3:3b",
+                    force_regenerate=force_regenerate
+                )
+                
+                if result.get('success'):
+                    stats = result.get('stats', {})
+                    total_stats['total_generated'] += stats.get('generated', 0)
+                    total_stats['total_skipped'] += stats.get('skipped', 0)
+                    total_stats['oeuvres_processed'] += 1
+                    print(f"   ✅ {stats.get('generated', 0)} générées, {stats.get('skipped', 0)} skippées")
+                else:
+                    total_stats['total_errors'] += 1
+                    print(f"   ❌ Erreur: {result.get('error')}")
+                    
+            except Exception as e:
+                total_stats['total_errors'] += 1
+                print(f"   ❌ Exception: {e}")
+                continue
+        
+        duration = time.time() - start_time
+        duration_str = f"{int(duration // 60)}m {int(duration % 60)}s"
+        
+        print(f"\n{'='*80}")
+        print(f"✅ PRÉGÉNÉRATION GLOBALE TERMINÉE")
+        print(f"   - Œuvres traitées: {total_stats['oeuvres_processed']}/{total_stats['total_oeuvres']}")
+        print(f"   - Narrations générées: {total_stats['total_generated']}")
+        print(f"   - Narrations skippées: {total_stats['total_skipped']}")
+        print(f"   - Erreurs: {total_stats['total_errors']}")
+        print(f"   - Durée: {duration_str}")
+        print(f"{'='*80}\n")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Prégénération globale terminée avec Ollama',
+            'stats': total_stats,
+            'duration': duration_str
+        })
         
     except Exception as e:
         import traceback
