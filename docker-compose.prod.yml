@@ -180,13 +180,11 @@ services:
       # Admin API (internal Docker network - for internal container communication)
       ADMIN_API_URL: http://app:3000
       
-      # Client Frontend (internal Docker network)
-      NEXT_PUBLIC_CLIENT_URL: http://client:80
-      
       # Public URLs (for browser-side requests - accessible from outside)
       # ⚠️ Override in .env.prod with your domain or keep VPS IP
       NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-http://51.38.188.211:5000}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://51.38.188.211:3000}
+      NEXT_PUBLIC_CLIENT_URL: ${NEXT_PUBLIC_CLIENT_URL:-http://51.38.188.211:8080}
       
       # Next.js PRODUCTION
       NODE_ENV: production

@@ -1,13 +1,14 @@
 import React from "react";
-import { FaPlay, FaPause, FaStepBackward, FaStepForward } from "react-icons/fa";
+import { FaPlay, FaPause, FaBackward, FaForward } from "react-icons/fa";
 
-const ResumeArtControls = ({ isPlaying, onTogglePlay, hasAudio, onPrevious, onNext }) => {
+const ResumeArtControls = ({ isPlaying, onTogglePlay, hasAudio, onSkipBackward, onSkipForward }) => {
   return (
     <div className="resume-art-controls">
-      <FaStepBackward 
+      <FaBackward 
         className="icon control" 
-        onClick={onPrevious}
+        onClick={onSkipBackward}
         style={{ opacity: hasAudio ? 1 : 0.3, cursor: hasAudio ? 'pointer' : 'not-allowed' }}
+        title="Reculer de 10 secondes"
       />
       {isPlaying ? (
         <FaPause 
@@ -22,10 +23,11 @@ const ResumeArtControls = ({ isPlaying, onTogglePlay, hasAudio, onPrevious, onNe
           style={{ opacity: hasAudio ? 1 : 0.3, cursor: hasAudio ? 'pointer' : 'not-allowed' }}
         />
       )}
-      <FaStepForward 
+      <FaForward 
         className="icon control" 
-        onClick={onNext}
+        onClick={onSkipForward}
         style={{ opacity: hasAudio ? 1 : 0.3, cursor: hasAudio ? 'pointer' : 'not-allowed' }}
+        title="Avancer de 10 secondes"
       />
     </div>
   );

@@ -10,6 +10,8 @@ const ResumeArt = ({ artwork }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [showZoomModal, setShowZoomModal] = useState(false);
+  const [volume, setVolume] = useState(0.3); // Volume initial à 30%
+  const [showVolumeWarning, setShowVolumeWarning] = useState(false);
 
   // Backend URL pour préfixer les chemins relatifs
   const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:3000';
@@ -32,9 +34,12 @@ const ResumeArt = ({ artwork }) => {
     setIsPlaying(false);
     setCurrentTime(0);
 
+    // Appliquer le volume initial (30%)
+    audio.volume = volume;
+
     // Force reload of the new source
     audio.load();
-  }, [audioUrl]);
+  }, [audioUrl, volume]);
 
   // Mettre à jour le temps en cours
   useEffect(() => {
@@ -76,6 +81,36 @@ const ResumeArt = ({ artwork }) => {
     setIsPlaying(!isPlaying);
   };
 
+  // Avancer de 10 secondes
+  const skipForward = () => {
+    if (!audioRef.current || !audioUrl) return;
+    const newTime = Math.min(audioRef.current.currentTime + 10, duration);
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  // Reculer de 10 secondes
+  const skipBackward = () => {
+    if (!audioRef.current || !audioUrl) return;
+    const newTime = Math.max(audioRef.current.currentTime - 10, 0);
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+  };
+
+  // Changer le volume avec avertissement si trop fort
+  const handleVolumeChange = (newVolume) => {
+    setVolume(newVolume);
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume;
+    }
+    
+    // Afficher avertissement si volume > 50%
+    if (newVolume > 0.5) {
+      setShowVolumeWarning(true);
+      setTimeout(() => setShowVolumeWarning(false), 3000);
+    }
+  };
+
   const handleSeek = (e) => {
     if (!audioRef.current || !duration) return;
     
@@ -112,11 +147,37 @@ const ResumeArt = ({ artwork }) => {
 
         {/* 🎵 Overlay that includes controls (then progress bar below) */}
         <div className="resume-art-controls-overlay">
+          {/* Avertissement volume */}
+          {showVolumeWarning && (
+            <div className="volume-warning">
+              ⚠️ Merci d'utiliser des écouteurs pour ne pas déranger les autres visiteurs
+            </div>
+          )}
+          
           <ResumeArtControls 
             isPlaying={isPlaying}
             onTogglePlay={togglePlay}
             hasAudio={!!audioUrl}
+            onSkipBackward={skipBackward}
+            onSkipForward={skipForward}
           />
+
+          {/* Contrôle de volume */}
+          {audioUrl && (
+            <div className="volume-control">
+              <span className="volume-icon">🎧</span>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={volume}
+                onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+                className="volume-slider"
+              />
+              <span className="volume-percentage">{Math.round(volume * 100)}%</span>
+            </div>
+          )}
 
           <div 
             className="resume-art-progress" 

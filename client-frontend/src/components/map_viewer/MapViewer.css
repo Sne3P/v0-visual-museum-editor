@@ -1,65 +1,81 @@
 .map-viewer-container {
     width: 100%;
+    height: 100%;
     background: #fff;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     overflow: hidden;
-    margin: 20px 0;
+    display: flex;
+    flex-direction: column;
 }
 
 .map-viewer-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 20px;
+    padding: 12px 16px;
     background: #f5f5f5;
     border-bottom: 1px solid #ddd;
+    flex-shrink: 0;
 }
 
 .map-viewer-header h3 {
     margin: 0;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
     color: #333;
 }
 
 .map-controls {
     display: flex;
-    gap: 8px;
+    gap: 6px;
 }
 
 .map-controls button {
-    padding: 6px 12px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
     background: #5dace2;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 8px;
     cursor: pointer;
-    font-size: 14px;
-    transition: background 0.2s;
+    font-size: 20px;
+    font-weight: bold;
+    transition: background 0.2s, transform 0.1s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .map-controls button:hover {
     background: #4a9bd1;
 }
 
+.map-controls button:active {
+    transform: scale(0.95);
+}
+
 .floor-selector {
     display: flex;
     justify-content: center;
-    gap: 10px;
+    gap: 8px;
     padding: 10px;
     background: #fafafa;
     border-bottom: 1px solid #ddd;
+    flex-shrink: 0;
+    flex-wrap: wrap;
 }
 
 .floor-button {
-    padding: 8px 16px;
+    padding: 10px 18px;
     background: #fff;
     color: #666;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 14px;
+    font-weight: 600;
     transition: all 0.2s;
 }
 
@@ -75,10 +91,13 @@
 
 .map-viewer-svg {
     width: 100%;
-    height: 500px;
+    flex: 1;
+    min-height: 300px;
     background: #fafafa;
     cursor: grab;
     touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .map-viewer-svg.panning {
@@ -96,6 +115,7 @@
 .room-label {
     pointer-events: none;
     user-select: none;
+    font-weight: 600;
 }
 
 .parcours-path {
@@ -106,15 +126,15 @@
 .artwork-point {
     cursor: pointer;
     transition: all 0.3s ease;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
 .artwork-point:hover {
-    r: 10;
-    filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.3));
+    filter: drop-shadow(0 0 8px rgba(0, 0, 0, 0.4));
 }
 
 .artwork-point.current {
-    /* Point rouge fixe sans animation */
+    filter: drop-shadow(0 0 8px rgba(255, 0, 0, 0.5));
 }
 
 .artwork-point.visited {
@@ -124,6 +144,7 @@
 .artwork-order {
     pointer-events: none;
     user-select: none;
+    font-weight: bold;
 }
 
 .artwork-label {
@@ -134,26 +155,29 @@
 .map-viewer-legend {
     display: flex;
     justify-content: center;
-    gap: 20px;
-    padding: 15px;
+    gap: 12px;
+    padding: 12px;
     background: #f9f9f9;
     border-top: 1px solid #ddd;
+    flex-wrap: wrap;
+    flex-shrink: 0;
 }
 
 .legend-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    color: #666;
+    gap: 6px;
+    font-size: 12px;
+    color: #555;
+    font-weight: 500;
 }
 
 .legend-color {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     border: 2px solid #fff;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .map-viewer-loading,
@@ -166,4 +190,67 @@
 
 .map-viewer-error {
     color: #d9534f;
+}
+
+/* ========== MOBILE OPTIMIZATIONS ========== */
+@media (max-width: 768px) {
+    .map-viewer-header {
+        padding: 10px 12px;
+    }
+    
+    .map-viewer-header h3 {
+        font-size: 14px;
+    }
+    
+    .map-controls button {
+        width: 44px;
+        height: 44px;
+        font-size: 22px;
+    }
+    
+    .floor-button {
+        padding: 12px 16px;
+        font-size: 13px;
+    }
+    
+    .map-viewer-svg {
+        min-height: 400px;
+    }
+    
+    .map-viewer-legend {
+        gap: 8px;
+        padding: 10px 8px;
+    }
+    
+    .legend-item {
+        font-size: 11px;
+        gap: 4px;
+    }
+    
+    .legend-color {
+        width: 12px;
+        height: 12px;
+    }
+}
+
+/* Très petits écrans */
+@media (max-width: 400px) {
+    .map-controls {
+        gap: 4px;
+    }
+    
+    .map-controls button {
+        width: 38px;
+        height: 38px;
+        font-size: 18px;
+    }
+    
+    .floor-button {
+        padding: 10px 12px;
+        font-size: 12px;
+    }
+    
+    .legend-item span {
+        display: none;
+    }
 }

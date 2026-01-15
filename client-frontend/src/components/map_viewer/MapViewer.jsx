@@ -75,8 +75,8 @@ const MapViewer = ({ parcours, currentIndex }) => {
 
         const handleWheel = (e) => {
             e.preventDefault();
-            const delta = e.deltaY > 0 ? 1.1 : 0.9;
-            setScale(prev => Math.max(0.5, Math.min(3, prev * delta)));
+            const delta = e.deltaY > 0 ? 1.15 : 0.85;
+            setScale(prev => Math.max(0.3, Math.min(6, prev * delta)));
         };
 
         svg.addEventListener('wheel', handleWheel, { passive: false });
@@ -95,8 +95,10 @@ const MapViewer = ({ parcours, currentIndex }) => {
     const handleMouseMove = (e) => {
         if (!isPanning) return;
         
-        const dx = (e.clientX - panStart.x) * (viewBox.width / 800) / scale;
-        const dy = (e.clientY - panStart.y) * (viewBox.height / 600) / scale;
+        // Facteur de vitesse amélioré pour navigation plus fluide
+        const speedFactor = 1.5;
+        const dx = (e.clientX - panStart.x) * (viewBox.width / 800) / scale * speedFactor;
+        const dy = (e.clientY - panStart.y) * (viewBox.height / 600) / scale * speedFactor;
         
         setViewBox(prev => ({
             ...prev,
@@ -127,11 +129,14 @@ const MapViewer = ({ parcours, currentIndex }) => {
             e.preventDefault();
             const dist = getTouchDistance(e.touches[0], e.touches[1]);
             const delta = dist / touchStartDist;
-            setScale(prev => Math.max(0.5, Math.min(3, prev * delta)));
+            // Zoom max 6x, min 0.3x pour mobile
+            setScale(prev => Math.max(0.3, Math.min(6, prev * delta)));
             setTouchStartDist(dist);
         } else if (e.touches.length === 1 && isPanning) {
-            const dx = (e.touches[0].clientX - panStart.x) * (viewBox.width / 800) / scale;
-            const dy = (e.touches[0].clientY - panStart.y) * (viewBox.height / 600) / scale;
+            // Vitesse de déplacement améliorée pour mobile
+            const speedFactor = 2;
+            const dx = (e.touches[0].clientX - panStart.x) * (viewBox.width / 800) / scale * speedFactor;
+            const dy = (e.touches[0].clientY - panStart.y) * (viewBox.height / 600) / scale * speedFactor;
             
             setViewBox(prev => ({
                 ...prev,
@@ -201,9 +206,19 @@ const MapViewer = ({ parcours, currentIndex }) => {
             <div className="map-viewer-header">
                 <h3>Plan du musée{hasMultipleFloors ? ` - ${floorName}` : ''}</h3>
                 <div className="map-controls">
-                    <button onClick={() => setScale(prev => Math.min(3, prev * 1.2))}>+</button>
-                    <button onClick={() => setScale(prev => Math.max(0.5, prev * 0.8))}>-</button>
-                    <button onClick={() => setScale(1)}>Reset</button>
+                    <button onClick={() => setScale(prev => Math.min(6, prev * 1.4))}>+</button>
+                    <button onClick={() => setScale(prev => Math.max(0.3, prev * 0.7))}>−</button>
+                    <button onClick={() => {
+                        setScale(1);
+                        // Recentrer sur l'œuvre actuelle
+                        if (currentArtwork?.position) {
+                            setViewBox(prev => ({
+                                ...prev,
+                                x: currentArtwork.position.x - prev.width / 2,
+                                y: currentArtwork.position.y - prev.height / 2
+                            }));
+                        }
+                    }}>⟲</button>
                 </div>
             </div>
 
@@ -257,8 +272,9 @@ const MapViewer = ({ parcours, currentIndex }) => {
                                 y={room.polygon_points.reduce((sum, p) => sum + p.y, 0) / room.polygon_points.length}
                                 className="room-label"
                                 textAnchor="middle"
-                                fill="#666"
-                                fontSize="14"
+                                fill="#555"
+                                fontSize="18"
+                                fontWeight="600"
                             >
                                 {room.name}
                             </text>
@@ -281,7 +297,8 @@ const MapViewer = ({ parcours, currentIndex }) => {
                             x2={segment.to.x}
                             y2={segment.to.y}
                             stroke="#5dace2"
-                            strokeWidth="4"
+                            strokeWidth="6"
+                            strokeLinecap="round"
                             opacity={1}
                         />
                     );
@@ -313,10 +330,10 @@ const MapViewer = ({ parcours, currentIndex }) => {
                             key={`waypoint-${idx}-${wpIdx}`}
                             cx={waypoint.x}
                             cy={waypoint.y}
-                            r="8"
+                            r="12"
                             fill="#4caf50"
                             stroke="#fff"
-                            strokeWidth="2"
+                            strokeWidth="3"
                         />
                     ));
                 })}
@@ -355,31 +372,31 @@ const MapViewer = ({ parcours, currentIndex }) => {
                     // Afficher tous les escaliers/ascenseurs
                     return Array.from(stairsMap.values()).map((stair, idx) => (
                         <g key={`stair-${idx}`}>
-                            {/* Cercle orange pour l'escalier */}
+                            {/* Cercle orange pour l'escalier - AGRANDI */}
                             <circle
                                 cx={stair.x}
                                 cy={stair.y}
-                                r="10"
+                                r="14"
                                 fill="#ff9800"
                                 stroke="#fff"
-                                strokeWidth="2"
+                                strokeWidth="3"
                             />
-                            {/* Icône escalier (lignes diagonales) */}
+                            {/* Icône escalier (lignes diagonales) - AGRANDIES */}
                             <line
-                                x1={stair.x - 6}
-                                y1={stair.y + 4}
-                                x2={stair.x + 6}
-                                y2={stair.y - 4}
+                                x1={stair.x - 8}
+                                y1={stair.y + 5}
+                                x2={stair.x + 8}
+                                y2={stair.y - 5}
                                 stroke="#fff"
-                                strokeWidth="2"
+                                strokeWidth="2.5"
                             />
                             <line
-                                x1={stair.x - 3}
-                                y1={stair.y + 4}
-                                x2={stair.x + 3}
-                                y2={stair.y - 4}
+                                x1={stair.x - 4}
+                                y1={stair.y + 5}
+                                x2={stair.x + 4}
+                                y2={stair.y - 5}
                                 stroke="#fff"
-                                strokeWidth="2"
+                                strokeWidth="2.5"
                             />
                         </g>
                     ));
@@ -393,15 +410,15 @@ const MapViewer = ({ parcours, currentIndex }) => {
                     
                     return (
                         <g key={artwork.oeuvre_id}>
-                            {/* Point de l'œuvre - AGRANDI */}
+                            {/* Point de l'œuvre - TRÈS AGRANDI pour mobile */}
                             <circle
                                 cx={artwork.position.x}
                                 cy={artwork.position.y}
-                                r={isCurrent ? 16 : 12}
+                                r={isCurrent ? 22 : 16}
                                 className={`artwork-point ${isCurrent ? 'current' : ''} ${isPast ? 'visited' : ''}`}
                                 fill={isCurrent ? '#ff0000' : isPast ? '#888' : '#5dace2'}
                                 stroke="#fff"
-                                strokeWidth="3"
+                                strokeWidth="4"
                             />
                             
                             {/* Numéro de l'ordre - AGRANDI */}
@@ -412,34 +429,34 @@ const MapViewer = ({ parcours, currentIndex }) => {
                                 textAnchor="middle"
                                 dominantBaseline="middle"
                                 fill="#fff"
-                                fontSize="14"
+                                fontSize="18"
                                 fontWeight="bold"
                             >
                                 {artwork.order}
                             </text>
                             
-                            {/* Label avec titre (seulement pour l'œuvre actuelle) */}
+                            {/* Label avec titre (seulement pour l'œuvre actuelle) - AGRANDI */}
                             {isCurrent && (
                                 <g>
                                     <rect
-                                        x={artwork.position.x + 15}
-                                        y={artwork.position.y - 12}
-                                        width={Math.min(artwork.title.length * 6 + 10, 200)}
-                                        height="24"
+                                        x={artwork.position.x + 25}
+                                        y={artwork.position.y - 16}
+                                        width={Math.min(artwork.title.length * 8 + 16, 250)}
+                                        height="32"
                                         fill="#ff0000"
                                         stroke="#fff"
-                                        strokeWidth="1"
-                                        rx="3"
+                                        strokeWidth="2"
+                                        rx="4"
                                     />
                                     <text
-                                        x={artwork.position.x + 20}
-                                        y={artwork.position.y + 3}
+                                        x={artwork.position.x + 33}
+                                        y={artwork.position.y + 4}
                                         className="artwork-label"
                                         fill="#fff"
-                                        fontSize="12"
+                                        fontSize="16"
                                         fontWeight="bold"
                                     >
-                                        {artwork.title.length > 30 ? artwork.title.substring(0, 30) + '...' : artwork.title}
+                                        {artwork.title.length > 25 ? artwork.title.substring(0, 25) + '...' : artwork.title}
                                     </text>
                                 </g>
                             )}
