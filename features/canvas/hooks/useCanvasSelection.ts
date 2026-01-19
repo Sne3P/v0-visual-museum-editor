@@ -296,6 +296,22 @@ export function useCanvasSelection(
       }
     }
 
+    // PRIORITÉ 6.6 : ENTRANCES (points d'entrée)
+    if (currentFloor.entrances) {
+      for (const entrance of currentFloor.entrances) {
+        const entranceRadius = 16 // Rayon en pixels monde (même que dans entrance.renderer.ts)
+        const dist = distance(point, { x: entrance.x, y: entrance.y })
+        
+        if (dist <= entranceRadius) {
+          return {
+            element: { type: 'entrance', id: entrance.id },
+            selectionInfo: { id: entrance.id, type: 'entrance' },
+            hoverInfo: { type: 'entrance', id: entrance.id }
+          }
+        }
+      }
+    }
+
     // PRIORITÉ 6.5 : VERTICAL LINKS (élément entier)
     for (const link of currentFloor.verticalLinks) {
       // Ignorer les liens d'autres étages

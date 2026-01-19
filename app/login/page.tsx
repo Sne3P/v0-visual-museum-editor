@@ -13,25 +13,26 @@ export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
   const { login } = useAuth()
   const router = useRouter()
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setIsLoading(true)
 
-    if (login(username, password)) {
-      router.push('/admin')
-    } else {
-      setError('Identifiants incorrects. Vérifiez les comptes de démonstration ci-dessous.')
-    }
-  }
-
-  const quickAdminLogin = () => {
-    setUsername('admin')
-    setPassword('admin123')
-    if (login('admin', 'admin123')) {
-      router.push('/admin')
+    try {
+      const success = await login(username, password)
+      if (success) {
+        router.push('/admin')
+      } else {
+        setError('Identifiants incorrects. Vérifiez les comptes de démonstration ci-dessous.')
+      }
+    } catch (error) {
+      setError('Erreur de connexion. Veuillez réessayer.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -76,28 +77,11 @@ export default function LoginPage() {
               />
             </div>
             
-            <Button type="submit" className="w-full">
-              Se connecter
-            </Button>
-
-            <Button 
-              type="button" 
-              variant="outline" 
-              className="w-full mt-2"
-              onClick={quickAdminLogin}
-            >
-              🚀 Connexion Admin Rapide
+            <Button type="submit" className="w-full" disabled={isLoading}>
+              {isLoading ? 'Connexion...' : 'Se connecter'}
             </Button>
           </form>
           
-          <div className="mt-4 text-sm text-gray-600 text-center">
-            <p className="font-medium mb-2">Comptes de démonstration :</p>
-            <div className="space-y-1 text-xs">
-              <p><strong>Admin Principal:</strong> admin / admin123</p>
-              <p><strong>Admin Musée:</strong> musee1 / musee123</p>
-              <p><strong>Agent Accueil:</strong> accueil1 / accueil123</p>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>

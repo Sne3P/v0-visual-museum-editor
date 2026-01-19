@@ -68,6 +68,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Vérifier si une entrée existe déjà à proximité (rayon de 50 unités)
+    const MIN_DISTANCE = 50
+    const nearbyEntrances = await queryPostgres<any>(`
+      SELECT entrance_id, x, y,
+        SQRT(POWER(x - $1, 2) + POWER(y - $2, 2)) as distance
+      FROM museum_entrances
+      WHERE plan_id = $3
+      HAVING SQRT(POWER(x - $1, 2) + POWER(y - $2, 2)) < $4
+    `, [x, y, plan_id, MIN_DISTANCE])
+
+    if (nearbyEntrances.length > 0) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: `Une entrée existe déjà à proximité (${Math.round(nearbyEntrances[0].distance)} unités). Distance minimale: ${MIN_DISTANCE} unités.`
+        },
+        { status: 400 }
+      )
+    }
+
     const result = await queryPostgres<any>(`
       INSERT INTO museum_entrances (plan_id, name, x, y, icon)
       VALUES ($1, $2, $3, $4, $5)

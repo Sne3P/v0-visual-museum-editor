@@ -209,8 +209,9 @@ export function Canvas({
           })
         })
         
-        if (response.ok) {
-          const data = await response.json()
+        const data = await response.json()
+        
+        if (response.ok && data.success) {
           console.log('✅ Point d\'entrée créé:', data)
           
           // Ajouter l'entrée au state local pour affichage immédiat
@@ -233,9 +234,14 @@ export function Canvas({
             floors: updatedFloors,
             selectedTool: 'select' 
           }, true, 'Création point d\'entrée')
+        } else {
+          // Afficher l'erreur à l'utilisateur
+          alert(`❌ Impossible de créer l'entrée: ${data.error || 'Erreur inconnue'}`)
+          console.error('❌ Erreur création entrée:', data.error)
         }
       } catch (error) {
         console.error('❌ Erreur création entrée:', error)
+        alert('❌ Erreur réseau lors de la création de l\'entrée')
       }
     }
   })

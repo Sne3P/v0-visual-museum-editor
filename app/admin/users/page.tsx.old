@@ -99,7 +99,7 @@ export default function UsersManagementPage() {
           password: formData.password,
           role: selectedUserType,
           name: formData.name,
-          museeId: null // TODO: récupérer l'ID du musée si besoin
+          museeId: 'musee-principal'
         })
       })
 
@@ -423,6 +423,111 @@ export default function UsersManagementPage() {
                   disabled={isSaving || !formData.name || !formData.username || !formData.password}
                 >
                   {isSaving ? 'Création en cours...' : '✓ Créer le compte'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  )
+}
+                          </div>
+                          <div className="text-xs text-gray-500">Créé le {user.createdAt}</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-mono bg-white px-2 py-1 rounded border">
+                            <div><strong>Login:</strong> {user.username}</div>
+                            <div><strong>MDP:</strong> {user.password}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        ) : (
+          /* Formulaire de création */
+          <Card className="max-w-2xl mx-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                {selectedUserType === 'admin_musee' ? (
+                  <UserCheck className="h-5 w-5 text-blue-600" />
+                ) : (
+                  <ShoppingCart className="h-5 w-5 text-green-600" />
+                )}
+                Créer un {selectedUserType === 'admin_musee' ? 'Administrateur Musée' : 'Agent Accueil/Vente'}
+              </CardTitle>
+              <CardDescription>
+                Remplissez les informations pour créer le nouveau compte utilisateur
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="name">Nom complet *</Label>
+                <Input
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => {
+                    const name = e.target.value
+                    setFormData({
+                      ...formData, 
+                      name,
+                      username: name ? generateUsername(name, selectedUserType!) : ''
+                    })
+                  }}
+                  placeholder="Jean Dupont"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="username">Identifiant (généré automatiquement)</Label>
+                  <Input
+                    id="username"
+                    value={formData.username}
+                    onChange={(e) => setFormData({...formData, username: e.target.value})}
+                    placeholder="Généré automatiquement"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Mot de passe temporaire</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({...formData, password: e.target.value})}
+                    />
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={() => setFormData({...formData, password: generatePassword()})}
+                    >
+                      Nouveau
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button 
+                  onClick={handleCreateUser}
+                  disabled={!formData.name}
+                  className="flex-1"
+                >
+                  Créer l'utilisateur
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsCreating(false)
+                    setSelectedUserType(null)
+                    setFormData({ name: '', username: '', password: '' })
+                  }}
+                >
+                  Annuler
                 </Button>
               </div>
             </CardContent>

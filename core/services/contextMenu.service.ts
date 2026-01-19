@@ -19,13 +19,14 @@ let clipboard: { element: SelectedElement; data: any } | null = null
 // ============================================================
 
 /**
- * Supprimer un élément simple (room, artwork, door, wall, verticalLink)
+ * Supprimer un élément simple (room, artwork, door, wall, verticalLink, entrance)
  * Pour verticalLink: suppression en cascade sur tous les étages du même groupe
  * Pour artwork: supprime aussi le PDF associé via l'API
+ * Pour entrance: supprime du floor et de la base de données
  */
 async function deleteSimpleElement(
   floor: any,
-  type: 'rooms' | 'artworks' | 'doors' | 'walls' | 'verticalLinks',
+  type: 'rooms' | 'artworks' | 'doors' | 'walls' | 'verticalLinks' | 'entrances',
   id: string
 ): Promise<any> {
   // Si artwork, supprimer le PDF associé d'abord
@@ -43,6 +44,30 @@ async function deleteSimpleElement(
         }
       } catch (error) {
         console.error(`❌ Erreur suppression PDF pour artwork ${id}:`, error)
+      }
+    }
+  }
+  
+  // Si entrance, supprimer de la base de données
+  if (type === 'entrances') {
+    const entrance = (floor[type] || []).find((el: any) => el.id === id)
+    if (entrance) {
+      try {
+        // Extraire l'entrance_id depuis l'id (format: "entrance-123")
+        const entranceIdMatch = id.match(/^entrance-(\d+)$/)
+        if (entranceIdMatch) {
+          const entranceId = parseInt(entranceIdMatch[1], 10)
+          const response = await fetch(`/api/museum/entrances?id=${entranceId}`, {
+            method: 'DELETE'
+          })
+          if (!response.ok) {
+            console.warn(`⚠️ Échec suppression entrance ${id}:`, await response.text())
+          } else {
+            console.log(`✅ Entrance supprimée de la DB: ${id}`)
+          }
+        }
+      } catch (error) {
+        console.error(`❌ Erreur suppression entrance ${id}:`, error)
       }
     }
   }
@@ -203,13 +228,14 @@ export async function executeSupprimer(
         updatedFloor = await deleteRoomWithChildren(updatedFloor, selected.id)
         successCount++
       }
-      // Éléments simples (artwork, door, wall, verticalLink)
-      else if (['artwork', 'door', 'wall', 'verticalLink'].includes(selected.type)) {
-        const typeMap: Record<string, 'artworks' | 'doors' | 'walls' | 'verticalLinks'> = {
+      // Éléments simples (artwork, door, wall, verticalLink, entrance)
+      else if (['artwork', 'door', 'wall', 'verticalLink', 'entrance'].includes(selected.type)) {
+        const typeMap: Record<string, 'artworks' | 'doors' | 'walls' | 'verticalLinks' | 'entrances'> = {
           artwork: 'artworks',
           door: 'doors',
           wall: 'walls',
-          verticalLink: 'verticalLinks'
+          verticalLink: 'verticalLinks',
+          entrance: 'entrances'
         }
         updatedFloor = await deleteSimpleElement(updatedFloor, typeMap[selected.type], selected.id)
         successCount++

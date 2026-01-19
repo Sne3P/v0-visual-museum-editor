@@ -3,7 +3,8 @@
  * Fonctions pour transformer (translate, rotate, scale) les éléments
  */
 
-import type { Point, Room, Wall, Door, Artwork, VerticalLink } from '@/core/entities'
+import type { Point, Room, Wall, Door, Artwork, VerticalLink, Entrance } from '@/core/entities'
+
 
 /**
  * Translater un polygone par un delta
@@ -82,6 +83,17 @@ export function translateVerticalLink(link: VerticalLink, delta: Point): Vertica
       x: link.position.x + delta.x,
       y: link.position.y + delta.y
     }
+  }
+}
+
+/**
+ * Translater une entrée
+ */
+export function translateEntrance(entrance: Entrance, delta: Point): Entrance {
+  return {
+    ...entrance,
+    x: entrance.x + delta.x,
+    y: entrance.y + delta.y
   }
 }
 

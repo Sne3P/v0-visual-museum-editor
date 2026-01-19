@@ -16,42 +16,12 @@ interface AuthContextType {
   isAuthenticated: boolean
   currentUser: User | null
   isLoading: boolean
-  login: (username: string, password: string) => boolean
+  login: (username: string, password: string) => Promise<boolean>
   logout: () => void
   hasPermission: (action: string) => boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
-
-// Base de données simulée des utilisateurs
-const USERS_DB: User[] = [
-  {
-    id: '1',
-    username: 'admin',
-    role: 'super_admin',
-    name: 'Administrateur Principal'
-  },
-  {
-    id: '2',
-    username: 'musee1',
-    role: 'admin_musee',
-    name: 'Admin Musée Louvre',
-    museeId: 'louvre'
-  },
-  {
-    id: '3',
-    username: 'accueil1',
-    role: 'accueil',
-    name: 'Vendeur Accueil',
-    museeId: 'louvre'
-  }
-]
-
-const USER_PASSWORDS: Record<string, string> = {
-  'admin': 'admin123',
-  'musee1': 'musee123',
-  'accueil1': 'accueil123'
-}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
@@ -72,7 +42,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const authData = localStorage.getItem('museum-auth-data')
       console.log('📱 Données d\'auth trouvées:', !!authData)
-      console.log('📱 Contenu authData:', authData)
       
       if (authData) {
         const userData = JSON.parse(authData)
@@ -94,30 +63,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const login = (username: string, password: string): boolean => {
-    const user = USERS_DB.find(u => u.username === username)
-    if (user && USER_PASSWORDS[username] === password) {
-      console.log('✅ Login réussi pour:', username, 'Role:', user.role)
-      setCurrentUser(user)
-      setIsAuthenticated(true)
+  const login = async (username: string, password: string): Promise<boolean> => {
+    try {
+      console.log('🔐 Tentative de connexion pour:', username)
       
-      // Sauvegarder dans localStorage
-      try {
-        const userDataStr = JSON.stringify(user)
-        localStorage.setItem('museum-auth-data', userDataStr)
-        console.log('💾 Session sauvegardée dans localStorage:', userDataStr)
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success && data.user) {
+        const user = data.user
+        console.log('✅ Login réussi pour:', username, 'Role:', user.role)
         
-        // Vérification immédiate
-        const checkData = localStorage.getItem('museum-auth-data')
-        console.log('🔍 Vérification immédiate - données présentes:', !!checkData)
-      } catch (error) {
-        console.error('❌ Erreur lors de la sauvegarde dans localStorage:', error)
+        setCurrentUser(user)
+        setIsAuthenticated(true)
+        
+        // Sauvegarder dans localStorage
+        try {
+          const userDataStr = JSON.stringify(user)
+          localStorage.setItem('museum-auth-data', userDataStr)
+          console.log('💾 Session sauvegardée dans localStorage')
+        } catch (error) {
+          console.error('❌ Erreur lors de la sauvegarde dans localStorage:', error)
+        }
+        
+        return true
       }
-      
-      return true
+
+      console.log('❌ Login échoué:', data.error || 'Identifiants incorrects')
+      return false
+
+    } catch (error) {
+      console.error('❌ Erreur réseau lors du login:', error)
+      return false
     }
-    console.log('❌ Login échoué pour:', username)
-    return false
   }
 
   const logout = () => {
@@ -145,7 +128,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         'manage_themes', 
         'system_settings',
         'manage_profils'       // Gestion des critères et profils
-        // PAS manage_accueil - c'est pour admin_musee
       ],
       admin_musee: [
         'edit_maps', 

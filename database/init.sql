@@ -309,9 +309,34 @@ CREATE INDEX IF NOT EXISTS idx_relations_cible ON relations(cible_id);
 -- INDEX LEGACY SUPPRIMÉ : idx_chunk_oeuvre_id (table chunk supprimée)
 
 -- ===============================
+-- TABLE : Users (Authentification)
+-- ===============================
+CREATE TABLE IF NOT EXISTS users (
+  user_id SERIAL PRIMARY KEY,
+  username VARCHAR(50) UNIQUE NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  role VARCHAR(20) NOT NULL CHECK (role IN ('super_admin', 'admin_musee', 'accueil')),
+  name VARCHAR(100) NOT NULL,
+  musee_id VARCHAR(50),
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  last_login TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
+
+-- ===============================
 -- DONNÉES PAR DÉFAUT
 -- ===============================
 INSERT INTO stats (stats_id) VALUES (1) ON CONFLICT DO NOTHING;
+
+-- Super Admin par défaut (mot de passe: admin123)
+-- Hash généré avec bcrypt, rounds=10
+INSERT INTO users (username, password_hash, role, name, is_active) VALUES
+('admin', '$2b$10$rKqF3ZH0GmP5X8u9yJ8xXe5LzVxH1qC7W5iN3vZ8K2fJ9wR4tL6Qm', 'super_admin', 'Administrateur Principal', true)
+ON CONFLICT (username) DO NOTHING;
 
 -- Paramètres du musée par défaut
 INSERT INTO museum_settings (setting_key, setting_value, description, category) VALUES

@@ -1,6 +1,6 @@
 /**
  * Hook pour gérer le déplacement (drag) d'éléments sélectionnés
- * Supporte : rooms, walls, doors, artworks, verticalLinks
+ * Supporte : rooms, walls, doors, artworks, verticalLinks, entrances
  * Validation temps réel pendant le déplacement
  */
 
@@ -13,6 +13,7 @@ import {
   translateDoor,
   translateArtwork,
   translateVerticalLink,
+  translateEntrance,
   calculateDelta,
   validateRoomMoveWithDoors,
   snapToGrid,
@@ -190,6 +191,9 @@ export function useElementDrag({
         case 'verticalLink':
           element = currentFloor.verticalLinks?.find(v => v.id === selected.id)
           break
+        case 'entrance':
+          element = currentFloor.entrances?.find(e => e.id === selected.id)
+          break
       }
       
       if (element) {
@@ -229,6 +233,7 @@ export function useElementDrag({
       let newDoors = floor.doors ? [...floor.doors] : []
       let newArtworks = floor.artworks ? [...floor.artworks] : []
       let newVerticalLinks = floor.verticalLinks ? [...floor.verticalLinks] : []
+      let newEntrances = floor.entrances ? [...floor.entrances] : []
       
       // Appliquer la transformation à chaque élément
       dragState.draggedElements.forEach(selected => {
@@ -362,6 +367,13 @@ export function useElementDrag({
               }
             }
             break
+            
+          case 'entrance':
+            const entranceIndex = newEntrances.findIndex(e => e.id === selected.id)
+            if (entranceIndex >= 0) {
+              newEntrances[entranceIndex] = translateEntrance(original, delta)
+            }
+            break
         }
       })
       
@@ -371,7 +383,8 @@ export function useElementDrag({
         walls: newWalls,
         doors: newDoors,
         artworks: newArtworks,
-        verticalLinks: newVerticalLinks
+        verticalLinks: newVerticalLinks,
+        entrances: newEntrances
       }
     })
     
